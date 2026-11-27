@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Video Analysis{% endblock %}
+{% block page_title %}AI Video Analysis{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/video.css') }}"/>
+{% endblock %}
+
+{% block content %}
+
+<!-- SESSION STATS BAR -->
+<div class="session-stats">
+  <div class="session-stat">
+    <i class="fas fa-film" style="color:var(--accent-purple);"></i>
+    <span>Frames Processed:</span>
+    <span class="val" id="stat-frames">0</span>
+  </div>
+  <div class="session-stat">
+    <i class="fas fa-car" style="color:var(--accent-cyan);"></i>
+    <span>Vehicles Detected:</span>
+    <span class="val" id="stat-detects">0</span>
+  </div>
+  <div class="session-stat">
+    <i class="fas fa-database" style="color:var(--accent-green);"></i>
+    <span>Session Records:</span>
+    <span class="val">{{ recent_detections|length }}</span>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;">
+    <i class="fas fa-info-circle" style="color:var(--accent-blue);"></i>
+    Speed estimates use pixel-displacement calibration — values are approximate
+  </div>
+</div>
+
+<!-- MAIN LAYOUT: LEFT (upload/webcam) + RIGHT (live feed) -->
+<div class="video-layout">
+
+  <!-- ── LEFT COLUMN ── -->
+  <div class="video-left">
+    <div class="card">
+
+      <!-- TAB SWITCHER -->
+      <div class="video-tabs">
+        <button class="video-tab-btn active" data-tab="upload">
+          <i class="fas fa-upload"></i> Upload Video
+        </button>
+        <button class="video-tab-btn" data-tab="webcam">
+          <i class="fas fa-webcam"></i> Live Webcam
+        </button>
+      </div>
+
+      <!-- ── UPLOAD TAB ── -->
+      <div id="panel-upload" class="video-tab-panel active">
+
+        <form id="upload-form" enctype="multipart/form-data">
+          <!-- Drag-drop zone -->
+          <div class="upload-zone" id="upload-zone">
+            <input type="file" id="video-file-input" name="video" accept=".mp4,.avi,.mov,.mkv"/>
+            <div class="upload-icon"><i class="fas fa-film"></i></div>
+            <div class="upload-title">Drag video here or click to browse</div>
+            <div class="upload-sub">Supported formats:</div>
+            <div class="upload-formats">.mp4 &nbsp;·&nbsp; .avi &nbsp;·&nbsp; .mov &nbsp;·&nbsp; .mkv</div>
+          </div>
+
+          <!-- Selected file info -->
+          <div class="selected-file-info" id="selected-file-info">
+            <i class="fas fa-file-video" style="color:var(--accent-blue);font-size:18px;"></i>
+            <span class="selected-file-name" id="selected-file-name">file.mp4</span>
+            <span class="selected-file-size" id="selected-file-size">—</span>
+            <span class="badge badge-success" style="font-size:10px;">Ready</span>
+          </div>
+
+          <!-- Submit -->
+          <button type="submit" id="analyze-btn" class="btn-analyze">
+            <i class="fas fa-brain"></i> Start Analysis
+          </button>
+        </form>
+
+        <!-- Progress Section -->
+        <div class="progress-section" id="progress-section">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill indeterminate" id="progress-bar-fill"></div>
+          </div>
+          <div class="progress-text">
+            <span class="progress-spinner"></span>
+            <span id="progress-text">Initializing AI engine...</span>
+          </div>
+          <div style="margin-top:10px;text-align:right;">
+            <button onclick="stopSession()" class="btn btn-danger btn-sm">
+              <i class="fas fa-stop-circle"></i> Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- Library warning hint -->
+        <div style="margin-top:16px;padding:10px 14px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:8px;font-size:11px;color:var(--text-muted);">
+          <i class="fas fa-exclamation-circle" style="color:var(--accent-purple);margin-right:5px;"></i>
+          Requires:
+          <code style="color:var(--accent-cyan);">pip install ultralytics easyocr opencv-python</code>
+          — YOLOv8 &amp; EasyOCR models auto-download on first run.
+        </div>
+      </div>
+
+      <!-- ── WEBCAM TAB ── -->
+      <div id="panel-webcam" class="video-tab-panel">
+
+        <div class="webcam-note">
+          <i class="fas fa-info-circle" style="color:var(--accent-blue);margin-top:1px;"></i>
+          <span>Webcam frames are captured and sent to the AI engine every <strong>3 seconds</strong> for vehicle detection and plate reading.</span>
+        </div>
+
+        <!-- Video preview -->
+        <div class="webcam-preview-wrap">
+          <video id="webcam-video" autoplay muted playsinline></video>
+          <div class="webcam-overlay-text" id="webcam-overlay">
+            <i class="fas fa-camera"></i>
+            <p>Camera is off<br/>Press "Start Camera" to begin</p>
+          </div>
+          <div class="webcam-active-indicator" id="webcam-active-ind" style="display:none;">
+            <span class="webcam-rec-dot"></span>
+            CAPTURING
+          </div>
+        </div>
+
+        <button class="btn-cam-start" id="webcam-start-btn">
+          <i class="fas fa-play-circle"></i> Start Camera
+        </button>
+        <button class="btn-cam-stop" id="webcam-stop-btn" style="display:none;">
+          <i class="fas fa-stop-circle"></i> Stop Camera
+        </button>
+      </div>
+
+    </div><!-- /card -->
+
+    <!-- RECENT DB DETECTIONS (from video sessions) -->
+    {% if recent_detections %}
+    <div class="card mt-16">
+      <div class="card-header">
+        <div class="card-title">
+          <i class="fas fa-history" style="color:var(--accent-purple);margin-right:8px;"></i>
+          Previous Video Session Detections
+        </div>
+        <span class="badge badge-info">Last {{ recent_detections|length }}</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Plate</th>
+              <th>Speed</th>
+              <th>Violation</th>
+              <th>Location</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in recent_detections %}
+            <tr>
+              <td style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--accent-cyan);">{{ v.plate_number }}</td>
+              <td class="{% if v.speed_kmh > 90 %}speed-red{% elif v.speed_kmh > 60 %}speed-orange{% else %}speed-green{% endif %}">
+                {{ '%.1f'|format(v.speed_kmh) }} km/h
+              </td>
+              <td>
+                {% if v.violation_type %}
+                <span class="badge badge-overspeeding">{{ v.violation_type }}</span>
+                {% else %}
+                <span class="badge badge-none">—</span>
+                {% endif %}
+              </td>
+              <td style="font-size:11px;color:var(--text-muted);">{{ v.location }}</td>
+              <td style="font-size:11px;color:var(--text-secondary);">{{ v.detected_at.strftime('%d %b, %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div><!-- /video-left -->
+
+  <!-- ── RIGHT COLUMN: LIVE FEED ── -->
+  <div class="video-right">
+    <div class="card" style="position:sticky;top:76px;">
+      <div class="live-feed-header">
+        <span class="live-pulse"></span>
+        <span class="card-title">Live Detections</span>
+        <button onclick="exportCsv()" id="export-csv-btn" class="btn btn-outline btn-sm" style="margin-left:auto;">
+          <i class="fas fa-download"></i> Export CSV
+        </button>
+      </div>
+
+      <div class="detection-feed" id="detection-feed">
+        <div class="feed-empty">
+          <i class="fas fa-camera"></i>
+          <p>No detections yet.<br/>Upload a video or start webcam.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /video-layout -->
+
+<!-- ── RESULTS TABLE (full width) ── -->
+<div class="result-table-section">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <i class="fas fa-list-alt" style="color:var(--accent-cyan);margin-right:8px;"></i>
+        Detection Results Table
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="clearResultTable(); detectionResults=[];" class="btn btn-outline btn-sm">
+          <i class="fas fa-trash-alt"></i> Clear
+        </button>
+        <button onclick="exportCsv()" class="btn btn-primary btn-sm">
+          <i class="fas fa-file-csv"></i> Export CSV
+        </button>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Plate Number</th>
+            <th>Speed</th>
+            <th>Violation</th>
+            <th>Camera / Session</th>
+            <th>Detected At</th>
+            <th>Challan</th>
+          </tr>
+        </thead>
+        <tbody id="results-tbody">
+          <tr class="empty-row">
+            <td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px;">
+              <i class="fas fa-info-circle" style="margin-right:6px;"></i>
+              Results will appear here after analysis
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/video.js') }}"></script>
+{% endblock %}

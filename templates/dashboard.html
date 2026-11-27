@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+
+<!-- ── STAT CARDS ── -->
+<div class="stat-grid stat-grid-6">
+  <div class="stat-card">
+    <div class="stat-icon cyan"><i class="fas fa-network-wired"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" data-count="12">12</div>
+      <div class="stat-label">Total Devices</div>
+      <div class="stat-change flat">8 cameras · 4 sensors</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i class="fas fa-broadcast-tower"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" data-count="8">8</div>
+      <div class="stat-label">Active Monitoring</div>
+      <div class="stat-change up"><i class="fas fa-circle" style="font-size:7px;"></i> Live</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="stat-violations-today" data-count="{{ today_violations }}">{{ today_violations }}</div>
+      <div class="stat-label">Violations Today</div>
+      <div class="stat-change {% if violation_change > 0 %}up{% elif violation_change < 0 %}down{% else %}flat{% endif %}">
+        {% if violation_change > 0 %}<i class="fas fa-arrow-up"></i> +{{ violation_change }}%
+        {% elif violation_change < 0 %}<i class="fas fa-arrow-down"></i> {{ violation_change }}%
+        {% else %}&mdash; Same as yesterday
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple"><i class="fas fa-file-invoice"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" id="stat-challans-today" data-count="{{ challans_issued }}">{{ challans_issued }}</div>
+      <div class="stat-label">E-Challans Issued</div>
+      <div class="stat-change flat">Total all-time</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i class="fas fa-road"></i></div>
+    <div class="stat-body">
+      <div class="stat-value">24.5</div>
+      <div class="stat-label">Roads Cleaned (km)</div>
+      <div class="stat-change up"><i class="fas fa-arrow-up"></i> +1.2 km today</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple"><i class="fas fa-film"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" data-count="{{ videos_analyzed }}">{{ videos_analyzed }}</div>
+      <div class="stat-label">Videos Analyzed</div>
+      <div class="stat-change flat">
+        <a href="{{ url_for('video.index') }}" style="color:var(--accent-purple);font-size:11px;">
+          Open AI Analysis <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROW 2: MAP + SYSTEM SUMMARY ── -->
+<div class="row" id="charts">
+  <!-- MAP -->
+  <div class="col-60">
+    <div class="card" style="height:420px;">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-map-marked-alt" style="color:var(--accent-cyan);margin-right:8px;"></i>Live Road Map — Panchagarh</div>
+        <div style="display:flex;gap:10px;font-size:11px;color:var(--text-muted);">
+          <span><span style="color:var(--accent-green);">●</span> Monitoring</span>
+          <span><span style="color:var(--accent-red);">●</span> Violation</span>
+          <span><span style="color:var(--accent-cyan);">●</span> Cleaning</span>
+          <span><span style="color:var(--accent-orange);">●</span> Block</span>
+        </div>
+      </div>
+      <div id="main-map" style="height:340px;border-radius:8px;"></div>
+    </div>
+  </div>
+
+  <!-- SYSTEM SUMMARY -->
+  <div class="col-40">
+    <div class="card" style="height:420px;display:flex;flex-direction:column;">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-tachometer-alt" style="color:var(--accent-purple);margin-right:8px;"></i>System Performance</div>
+      </div>
+      <div style="height:180px;position:relative;display:flex;align-items:center;justify-content:center;">
+        <canvas id="systemChart"></canvas>
+      </div>
+      <hr class="section-divider"/>
+      <div class="card-title" style="font-size:13px;margin-bottom:8px;">
+        <i class="fas fa-bell" style="color:var(--accent-orange);margin-right:6px;"></i>Recent Alerts
+      </div>
+      <ul class="alert-list" id="alertsList" style="flex:1;overflow-y:auto;">
+        {% for alert in last_alerts[:4] %}
+        <li class="alert-item">
+          <span class="alert-dot {{ alert.severity }}"></span>
+          <div class="alert-info">
+            <div class="alert-type">{{ alert.alert_type }}</div>
+            <div class="alert-loc">{{ alert.location }}</div>
+          </div>
+          <span class="alert-time">{{ alert.timestamp.strftime('%H:%M') }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROW 3: TRAFFIC + VIOLATIONS + STATUS ── -->
+<div class="row">
+  <!-- TRAFFIC CHART -->
+  <div class="col-40">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-chart-area" style="color:var(--accent-blue);margin-right:8px;"></i>Traffic Flow Today</div>
+        <span class="badge badge-info">Last 24h</span>
+      </div>
+      <div class="chart-container" style="height:220px;position:relative;">
+        <canvas id="trafficChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIOLATION DONUT -->
+  <div class="col-30">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-chart-pie" style="color:var(--accent-orange);margin-right:8px;"></i>Violations by Type</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div style="width:140px;height:140px;position:relative;flex-shrink:0;">
+          <canvas id="violationChart"></canvas>
+        </div>
+        <div class="donut-legend" id="violationLegend">
+          {% for vtype, count in violation_breakdown.items() %}
+          <div class="legend-item">
+            <span class="legend-dot" style="background:{% if loop.index==1 %}#ef4444{% elif loop.index==2 %}#f59e0b{% elif loop.index==3 %}#8b5cf6{% elif loop.index==4 %}#06b6d4{% else %}#1a56db{% endif %}"></span>
+            <span>{{ vtype }}</span>
+            <span class="legend-count">{{ count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SYSTEM STATUS -->
+  <div class="col-30">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><i class="fas fa-server" style="color:var(--accent-green);margin-right:8px;"></i>System Status</div>
+        <span class="badge badge-success"><i class="fas fa-circle" style="font-size:7px;"></i> All OK</span>
+      </div>
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-dot online"></span>
+          <div><div class="status-name">AI Camera</div><div class="status-label">Online</div></div>
+        </div>
+        <div class="status-item">
+          <span class="status-dot online"></span>
+          <div><div class="status-name">LIDAR</div><div class="status-label">Online</div></div>
+        </div>
+        <div class="status-item">
+          <span class="status-dot online"></span>
+          <div><div class="status-name">GPS Module</div><div class="status-label">Online</div></div>
+        </div>
+        <div class="status-item">
+          <span class="status-dot active"></span>
+          <div><div class="status-name">Cleaning Bot</div><div class="status-label">Active</div></div>
+        </div>
+        <div class="status-item">
+          <span class="status-dot online"></span>
+          <div><div class="status-name">Network</div><div class="status-label">Stable</div></div>
+        </div>
+        <div class="status-item">
+          <span class="status-dot warning"></span>
+          <div><div class="status-name">Battery</div><div class="status-label">85%</div></div>
+        </div>
+      </div>
+
+      <hr class="section-divider"/>
+      <div style="font-size:11px;color:var(--text-muted);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Total vehicles tracked</span>
+          <span style="color:var(--text-primary);font-weight:600;">{{ total_vehicles }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Total violations logged</span>
+          <span style="color:var(--accent-orange);font-weight:600;">{{ total_violations }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span>Active cameras</span>
+          <span style="color:var(--accent-green);font-weight:600;">{{ active_cameras }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

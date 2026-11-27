@@ -1,0 +1,1367 @@
+REVISION NOTICE — NOVEMBER 2026
+================================
+This file contains the earlier full project reference. For current deployment,
+security, firmware AP setup, remote-network operation and hardware safety,
+use the updated guides included beside this file:
+
+README.md
+RENDER_DEPLOYMENT_GUIDE.md
+GITHUB_SETUP_GUIDE.md
+ESP32_AP_SETUP_GUIDE.md
+REMOTE_CONNECTION_GUIDE.md
+HARDWARE_WIRING_GUIDE.txt
+STREETWATCH_NEO_BEGINNER_GUIDE.txt
+
+The older config.h/manual Wi-Fi instructions in this legacy reference are
+superseded. Current firmware uses Preferences/NVS and the STREETWATCH-SETUP
+phone portal. Do not restore exposed credentials from old instructions.
+
+--- LEGACY PROJECT REFERENCE BELOW ---
+STREETWATCH NEO
+COMPLETE USER, WEBSITE, ESP32, PINOUT, WIRING AND OPERATING GUIDE
+=================================================================
+
+Project version covered by this guide:
+- StreetWatch Neo multi-device project ZIP: streetwatch-neo-multi-device.zip
+- ESP32 firmware: firmware/StreetWatchESP32/StreetWatchESP32.ino
+- ESP32 configuration template: firmware/StreetWatchESP32/config.h.example
+- ESP32 board: ESP32 DevKit V1
+- Motor driver: L298N dual H-bridge
+- Line sensor: OpenJumper 4-channel digital IR line-tracking module
+- Optional distance sensor: HC-SR04
+
+READ THIS FIRST
+---------------
+This guide documents the supplied project files and their current implementation.
+It does not mean that every dashboard tile represents a physically connected
+sensor. Some dashboard figures and system-status indicators are demonstration
+or placeholder values. Test the project safely before connecting motors or tools.
+
+IMPORTANT ELECTRICAL SAFETY
+---------------------------
+1. Disconnect motor and accessory power while wiring.
+2. Never connect a motor, pump, solenoid, high-current lamp, or other load
+   directly to an ESP32 GPIO.
+3. Use correctly rated motor drivers, relay modules or MOSFET driver modules.
+4. Use a separate correctly rated supply for motors and high-current accessories.
+5. Join ESP32 GND, L298N GND, sensor GND and non-isolated driver GND to provide
+   a common logic reference.
+6. Never apply 5V to an ESP32 GPIO. ESP32 GPIO logic is 3.3V.
+7. The HC-SR04 ECHO signal is normally 5V. Use a resistor divider or logic
+   level shifter before GPIO18.
+8. Fit physical upper and lower lift limit switches and a hardwired UP/DOWN
+   interlock. Software protection is not a substitute.
+9. Keep a physical motor/battery emergency disconnect within reach.
+10. First test with the wheels lifted, accessories disconnected, and low speed.
+11. Do not test autonomous movement on a public road or near people/traffic.
+12. The line-follow and ultrasonic functions are prototype features, not
+    certified safety systems.
+
+=================================================================
+PART 1 - PROJECT OVERVIEW
+=================================================================
+
+StreetWatch Neo is a Flask web dashboard with several traffic-management
+pages and a separate ESP32 rover-control feature.
+
+The website runs on a computer or a hosted server. Each ESP32 connects outward
+to the website using HTTP/HTTPS requests. A device has a unique ID and a unique
+authentication token. The Control page lets the operator select which
+registered ESP32 receives commands.
+
+The ESP32 firmware supports:
+- Wi-Fi connection to the configured StreetWatch server.
+- Authenticated command polling.
+- Manual two-motor drive using an L298N.
+- Auto line-following using a four-channel digital IR sensor.
+- White-line or black-line target selection.
+- Optional HC-SR04 obstacle stop.
+- Brush, LED and Spray latched outputs.
+- Rig Up and Rig Down momentary outputs.
+- Telemetry including Wi-Fi RSSI, line sensor states and optional distance.
+- Stop/off behaviour when server commands are lost.
+
+The ESP32 is not a USB camera host. USB webcams connect to the computer running
+the Flask website and are used by Live Monitoring / Video Analysis.
+
+=================================================================
+PART 2 - WEBSITE INSTALLATION AND FIRST START
+=================================================================
+
+A. Requirements
+---------------
+- Windows PC for local development.
+- Python installed.
+- VS Code or another editor.
+- Internet access for installing Python packages.
+- Project ZIP extracted into a normal folder.
+
+B. Extract the project
+----------------------
+1. Extract streetwatch-neo-multi-device.zip.
+2. Open the extracted streetwatch-neo folder in VS Code.
+3. Open the VS Code terminal in that folder.
+4. Do not run commands from a different folder.
+
+C. Create and activate a Python virtual environment (Windows PowerShell)
+------------------------------------------------------------------------
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+
+If PowerShell blocks activation, use Command Prompt:
+    .venv\Scripts\activate.bat
+
+If package installation fails, read the full error. Some AI/computer-vision
+packages can require compatible Python versions and additional system
+dependencies.
+
+D. Environment file
+-------------------
+The project contains .env.example. Copy it to .env:
+    Copy-Item .env.example .env
+
+Review the example values and set a strong secret key before deployment.
+Do not publish .env, passwords, or device tokens.
+
+E. Start the website
+--------------------
+    python app.py
+
+Open this address in the same PC browser:
+    http://127.0.0.1:5000
+
+For a LAN test from another device on the same Wi-Fi, the Flask app is configured
+to listen on 0.0.0.0:5000. Find the PC IPv4 address with:
+    ipconfig
+
+Example LAN URL:
+    http://192.168.1.10:5000
+
+The actual IP will be different on each network. Allow the required port through
+Windows Firewall only for a trusted private network.
+
+F. Login
+--------
+The project setup notes identify these existing database accounts:
+    Administrator: (legacy demo admin account removed)
+    Operator:      (legacy demo account removed; create a fresh operator/admin account)
+
+These are development defaults. Change them before using the website outside
+a private test environment. Do not expose a site using default credentials.
+
+=================================================================
+PART 3 - SIDEBAR / EVERY WEBSITE TAB
+=================================================================
+
+The sidebar is vertically scrollable. Scroll inside the sidebar to reach items
+that do not fit on screen.
+
+1. DASHBOARD
+------------
+Purpose:
+The main overview page.
+
+Visible sections:
+- Summary/statistic cards.
+- Live Road Map panel.
+- System Performance chart.
+- Recent Alerts list.
+- Traffic Flow Today chart.
+- Violations by Type chart.
+- System Status panel.
+- Totals for tracked vehicles, violations and active cameras.
+
+How to use:
+1. Sign in.
+2. Open Dashboard.
+3. Review summary cards and charts.
+4. Use the map and recent-alert area as an overview.
+5. Open the relevant detailed page from the sidebar to inspect records.
+
+Important implementation note:
+Some displayed values in the supplied dashboard template are static demonstration
+values (for example the sample device/monitoring counts, road-cleaned distance,
+and several sample system-status labels). Do not treat those particular tiles
+as proof that a physical device or sensor is actually connected. The database-
+derived vehicle/violation/challan values are rendered separately.
+
+2. CONTROL
+----------
+Purpose:
+Operate one selected registered ESP32 rover.
+
+Before using:
+- Register the ESP32 in Devices.
+- Upload firmware with that device's ID and token.
+- Make sure the device appears online.
+- Lift the wheels for initial tests.
+
+Device selector:
+- Select the device name from the Selected Device dropdown.
+- Commands are sent with the selected device_id.
+- Select another device to operate that rover instead.
+- The firmware polls only the commands belonging to its own token/device.
+
+Connection indicator:
+- Online means the website has received a recent telemetry request.
+- Offline means the device has not checked in recently.
+- The backend considers a device connected when its last_seen age is under
+  approximately 10 seconds.
+- If a device goes stale/offline, the backend resets movement to STOP and
+  clears accessory outputs.
+
+Manual mode:
+- Select MANUAL.
+- Use the movement controls:
+  FORWARD: both motors forward.
+  REVERSE: both motors reverse.
+  LEFT: Motor A forward, Motor B reverse (pivot turn).
+  RIGHT: Motor A reverse, Motor B forward (pivot turn).
+  STOP: both motors stop.
+- Movement buttons are hold controls. Press and hold to move; release to stop.
+- Adjust the speed slider. The firmware uses a value from 0 to 255 for PWM.
+- Start at a low value and increase only after verifying the motor directions.
+
+Auto mode:
+- Select AUTO LINE FOLLOW.
+- Select WHITE LINE or BLACK LINE.
+- White is the default target.
+- The firmware interprets HIGH as the white/light target and LOW as the black
+  target for the linked OpenJumper module description.
+- The sensor reads reflected infrared contrast. It does not identify arbitrary
+  RGB colours. A coloured tape may work only if its IR reflectivity contrasts
+  sufficiently with the floor.
+- If no selected line is detected, firmware stops the motors.
+- If the optional ultrasonic sensor detects an object closer than 16 cm,
+  firmware stops the motors.
+- Adjust the sensor trimmers and mounting height on the real track.
+
+Attachments:
+- BRUSH: click once to turn ON; click again to turn OFF.
+- LED: click once to turn ON; click again to turn OFF.
+- SPRAY: click once to turn ON; click again to turn OFF.
+- RIG UP: press and hold to energize; release to stop.
+- RIG DOWN: press and hold to energize; release to stop.
+- Rig Up and Rig Down are mutually interlocked in the web backend.
+- Emergency Stop stops movement and switches all accessory outputs OFF.
+
+Telemetry fields:
+- Active mode: Manual or Auto.
+- Movement: current movement command.
+- Battery: only available if optional battery measurement is enabled and wired.
+- Line sensors L-to-R: four reported sensor states.
+- Follow colour: White or Black target.
+- Wi-Fi signal: RSSI in dBm.
+- Obstacle distance: HC-SR04 reading when available.
+- Firmware: firmware version string.
+- Device: selected device ID.
+- Updated/last seen: recent server contact age.
+
+IMPORTANT:
+A momentary Rig button can stop if the browser loses focus or the connection
+fails. A physical lift limit switch and hardwired interlock are still required.
+Do not leave a lift mechanism energized unattended.
+
+3. DEVICES
+-----------
+Purpose:
+Register and manage multiple ESP32 devices.
+
+Fields on Add Device:
+- Unique device ID: must be unique, e.g. rover-01.
+- Display name: friendly name, e.g. North Gate Rover.
+- Website server URL: base URL of the StreetWatch website, not the ESP32 IP.
+
+Example:
+    Device ID: rover-01
+    Name: Main Rover
+    Server URL: https://streetwatch.example.com
+
+Steps:
+1. Sign in with an administrator account.
+2. Open Devices.
+3. Enter a unique ID.
+4. Enter a display name.
+5. Enter the website base URL.
+6. Click ADD DEVICE.
+7. The website creates a unique token.
+8. Copy the token/configuration snippet immediately and keep it private.
+9. Put that ID, token and server URL in the matching ESP32 config.h.
+10. Upload the firmware to that board.
+
+Each ESP32 must have:
+- Its own unique device ID.
+- Its own unique token.
+- Its own Wi-Fi SSID/password (which may be shared if on the same Wi-Fi).
+- The correct StreetWatch server URL.
+
+Device cards show device identity, URL, online/offline state and available
+management actions. The URL can be edited in the website, but editing the
+website record does not reprogram the firmware already flashed onto the ESP32.
+If the firmware URL changes, edit config.h and upload firmware again.
+
+Security:
+- The token is shown only once after device creation.
+- Do not share it publicly.
+- Do not reuse one token on several ESP32 boards.
+- If a token is lost, delete/re-register the device to generate a fresh token,
+  then update and re-upload that board's config.h.
+- Only administrators can add, edit or delete devices and issue control commands.
+
+4. LIVE MONITORING
+------------------
+Purpose:
+View USB webcams connected to the computer running the Flask application.
+
+How to use:
+1. Connect USB webcams to the computer that runs StreetWatch.
+2. Allow the operating system to detect the cameras.
+3. Start the Flask website.
+4. Open Live Monitoring.
+5. The page scans for available host-connected webcams and displays camera
+   feeds where available.
+
+Camera connection facts:
+- USB webcams connect to the Flask computer, not to ESP32 GPIO pins.
+- ESP32 Wi-Fi connection and USB camera connection are separate systems.
+- One detected webcam appears as one camera view.
+- Multiple supported webcams can be shown in a grid.
+- If a camera is missing, check its USB cable, operating-system permissions,
+  camera index, and whether another program is using it.
+
+The page also contains a mock/simulated detection action in the supplied
+template. A simulated event is not proof of a real camera detection.
+
+5. VIDEO ANALYSIS
+-----------------
+Purpose:
+Analyze uploaded video or a webcam session using the project's video-analysis
+pipeline.
+
+The supplied page includes:
+- Upload tab for a video file.
+- Webcam tab for a camera session.
+- Start/stop controls for a webcam session.
+- Analysis results table.
+- Plate, speed, violation, location and time columns.
+- CSV export and result-clearing controls.
+- Challan-related action where applicable.
+
+How to use uploaded video:
+1. Open Video Analysis.
+2. Choose the Upload tab.
+3. Select a supported video file.
+4. Submit/start analysis.
+5. Wait for processing.
+6. Review the detected plate/speed/violation records.
+7. Export CSV if required.
+
+How to use webcam:
+1. Connect a webcam to the Flask computer.
+2. Open Video Analysis.
+3. Choose Webcam.
+4. Start the webcam session.
+5. Stop the session when finished.
+6. Review the result rows.
+
+AI detection depends on the installed Python packages, model files, camera/video
+quality, lighting, angle, resolution and model accuracy. Always manually review
+records before taking enforcement action. Do not assume that every plate or
+violation will be detected correctly.
+
+6. E-CHALLAN
+-------------
+Purpose:
+View and print electronic challans generated from violation/vehicle records.
+
+Typical workflow:
+1. Open Violations or Vehicles.
+2. Find a record with a violation and no challan yet.
+3. Use its issue-challan action.
+4. Open E-Challan to view challan records/details.
+5. Use the print view/action for a challan when available.
+
+The supplied E-Challan page directs users to Violations to issue challans.
+Verify plate number, violation, time, location and other details before issuing.
+A generated challan should be checked by an authorized person.
+
+7. VIOLATIONS
+-------------
+Purpose:
+Review detected traffic violations.
+
+The page lists:
+- Record number.
+- Plate number.
+- Detection time.
+- Speed.
+- Location.
+- Violation type.
+- Camera.
+- Challan status.
+- Action controls.
+
+Violation categories represented in the project include:
+- Overspeeding.
+- No Helmet.
+- No Parking.
+- Signal Jumping.
+- Wrong Lane.
+
+How to use:
+1. Open Violations.
+2. Review the record and evidence/details available.
+3. Use the type filter if shown.
+4. Review the plate, time, speed, location and camera.
+5. Issue a challan only after verifying the event.
+6. Use pagination to move between result pages.
+
+8. VEHICLES
+------------
+Purpose:
+Browse vehicle records created by detection/analysis.
+
+The page includes:
+- Search.
+- Plate number.
+- Detection time.
+- Speed.
+- Location.
+- Violation.
+- Camera.
+- Challan status.
+- View details action.
+- Issue challan action for eligible records.
+- Print/open challan action for already-issued challans.
+- Pagination.
+
+How to use:
+1. Open Vehicles.
+2. Search for a plate number if needed.
+3. Review the matching record.
+4. Open the details view.
+5. If a violation exists and challan is pending, use the issue action only
+   after checking the record.
+
+9. TRAFFIC ANALYTICS
+--------------------
+Purpose:
+Jump to the charts section on the Dashboard.
+
+Use it to view:
+- Road map area.
+- Traffic flow chart.
+- Violation type chart.
+- System overview charts.
+
+It is a Dashboard anchor, not a separate analytics data-entry page.
+
+10. REPORTS
+-----------
+Purpose:
+View aggregate traffic and violation summaries.
+
+The supplied page contains:
+- Total vehicles logged.
+- Total violations.
+- Challans issued.
+- Violation rate.
+- 7-day traffic volume chart.
+- Violation breakdown chart.
+- Violation summary by location.
+- Counts by Overspeeding, No Helmet, No Parking, Signal Jumping and Wrong Lane.
+
+Use Reports to review overall trends. Use Violations or Vehicles for individual
+record review.
+
+11. ALERTS
+----------
+The sidebar currently shows an Alerts navigation item with href="#". In this
+project version it is a placeholder link, not a completed standalone Alerts
+page. The Dashboard does show a Recent Alerts panel populated from alert data.
+
+12. SETTINGS
+------------
+The sidebar currently shows Settings as a placeholder link (href="#"). It is
+not a completed settings page in this supplied version.
+
+13. USER MANAGEMENT
+-------------------
+The sidebar currently shows User Management as a placeholder link (href="#").
+It is not a completed user-management page in this supplied version. Login and
+role checks exist in the application, but this sidebar item is not a complete
+user administration interface.
+
+=================================================================
+PART 4 - ESP32 DEVKIT V1 COMPLETE PINOUT
+=================================================================
+
+Board assumptions:
+- ESP32 DevKit V1 development board.
+- GPIO names below refer to GPIO numbers, not physical header positions.
+- Different ESP32 DevKit board layouts may have different physical pin order.
+- Read the GPIO labels printed on the actual board.
+
+A. GPIO ASSIGNMENT TABLE
+------------------------
+GPIO 5   -> HC-SR04 TRIG (optional)
+GPIO 13  -> L298N IN4
+GPIO 14  -> L298N IN3
+GPIO 16  -> Brush relay/MOSFET driver input
+GPIO 17  -> LED driver input
+GPIO 18  -> HC-SR04 ECHO through voltage divider (optional)
+GPIO 19  -> Spray pump relay/MOSFET driver input
+GPIO 21  -> Rig Up relay/driver input
+GPIO 22  -> Rig Down relay/driver input
+GPIO 25  -> L298N ENA / Motor A PWM
+GPIO 26  -> L298N IN1
+GPIO 27  -> L298N IN2
+GPIO 32  -> IR line sensor OUT1 / physical leftmost
+GPIO 33  -> L298N ENB / Motor B PWM
+GPIO 34  -> IR line sensor OUT2 (input only)
+GPIO 35  -> IR line sensor OUT3 (input only)
+GPIO 36  -> IR line sensor OUT4 / physical rightmost (input only)
+GPIO 39  -> Optional battery ADC input (disabled by default)
+3V3      -> OpenJumper line sensor VCC
+GND      -> Common logic ground
+
+GPIO34, GPIO35, GPIO36 and GPIO39 are input-only pins on the ESP32. That is
+suitable for sensor/ADC inputs; do not use them as outputs.
+
+B. L298N MOTOR DRIVER CONNECTIONS
+---------------------------------
+ESP32 GPIO25  -> L298N ENA
+ESP32 GPIO26  -> L298N IN1
+ESP32 GPIO27  -> L298N IN2
+ESP32 GPIO33  -> L298N ENB
+ESP32 GPIO14  -> L298N IN3
+ESP32 GPIO13  -> L298N IN4
+ESP32 GND     -> L298N GND
+
+Motor A (front/first motor):
+    L298N OUT1 and OUT2 -> Motor A terminals
+
+Motor B (second/rear motor):
+    L298N OUT3 and OUT4 -> Motor B terminals
+
+Motor power:
+    Motor battery positive -> L298N motor supply terminal (+12V / VS / VM,
+    depending on the exact board silkscreen and rated input).
+    Motor battery negative -> L298N GND.
+
+Important L298N notes:
+- Remove ENA and ENB jumpers if using ESP32 PWM speed control on those pins.
+- Check the exact L298N board's regulator/jumper instructions.
+- Do not connect the motor battery voltage to ESP32.
+- Do not assume the L298N 5V terminal can power the ESP32. Follow the exact
+  board regulator instructions; keep motor and ESP32 supplies appropriately
+  separated.
+- If a motor spins opposite to expected, disconnect power and swap that motor's
+  two OUT wires, or change firmware direction mapping.
+- The firmware assumes Motor A is the first/front motor and Motor B is the
+  second/rear motor. Chassis geometry may require adjustment.
+
+C. OPENJUMPER 4-CHANNEL DIGITAL IR SENSOR
+-----------------------------------------
+Sensor VCC  -> ESP32 3V3
+Sensor GND  -> ESP32 GND
+Sensor OUT1 -> ESP32 GPIO32 (leftmost after mounting/orientation check)
+Sensor OUT2 -> ESP32 GPIO34
+Sensor OUT3 -> ESP32 GPIO35
+Sensor OUT4 -> ESP32 GPIO36 (rightmost after mounting/orientation check)
+
+The board's printed connector labels and actual orientation must be checked.
+Do not blindly assume the physical connector order. Arrange the four outputs
+so they correspond left-to-right across the rover.
+
+Sensor behaviour used by this firmware:
+- Selected WHITE target: raw digital HIGH is treated as active.
+- Selected BLACK target: raw digital LOW is treated as active.
+
+The module senses reflected infrared brightness/contrast. It does not perform
+RGB colour recognition. A white/black selector changes the digital logic target;
+it cannot make the sensor recognize every coloured line.
+
+Power the sensor from ESP32 3V3 when its outputs connect directly to ESP32 GPIO.
+The product description lists a 3.3-5V supply range; using 3V3 helps keep its
+output logic at a safe ESP32 level. Adjust each channel's sensitivity trimmer
+on the real surface. Mount the sensor parallel to the track at a consistent
+height. Verify the output LED/logic for both line and background.
+
+If left/right steering is reversed, check sensor physical ordering and then
+the LINE_PINS mapping in the firmware.
+
+D. OPTIONAL HC-SR04 ULTRASONIC DISTANCE SENSOR
+---------------------------------------------
+HC-SR04 VCC  -> Regulated 5V
+HC-SR04 GND  -> ESP32 GND
+HC-SR04 TRIG -> ESP32 GPIO5
+HC-SR04 ECHO -> resistor voltage divider / level shifter -> ESP32 GPIO18
+
+Never connect the 5V ECHO output directly to ESP32 GPIO18.
+
+The firmware's ultrasonic interlock is enabled in the supplied code:
+    USE_ULTRASONIC_INTERLOCK=true
+It stops the motors when a valid measured distance is less than 16 cm.
+If no HC-SR04 is installed, change the setting to false in the firmware before
+uploading, otherwise the sensor reading may be unavailable and the obstacle
+interlock will not provide useful protection.
+
+E. ATTACHMENT DRIVER CONNECTIONS
+--------------------------------
+ESP32 GPIO16 -> Brush relay/MOSFET IN
+ESP32 GPIO17 -> LED driver IN
+ESP32 GPIO19 -> Spray pump relay/MOSFET IN
+ESP32 GPIO21 -> Rig Up relay/driver IN
+ESP32 GPIO22 -> Rig Down relay/driver IN
+Driver GND   -> ESP32 GND for non-isolated modules
+
+Power the actual loads from a separate supply of the correct voltage/current.
+Use correctly rated relay contacts or MOSFETs. Add flyback protection for
+inductive DC loads (motors, pumps, solenoids, relays) as required by the driver
+design. Add fuses and suitable wire.
+
+Firmware attachment output convention:
+    HIGH = ON
+    LOW  = OFF
+
+Confirm whether your relay board is active-HIGH or active-LOW before connecting
+the real load. The supplied firmware assumes active-HIGH driver inputs. If the
+relay module is active-LOW, the firmware output logic must be inverted.
+
+Rig UP and Rig DOWN must also have independent physical limit switches and a
+hardwired electrical interlock. Never rely only on the web app to prevent
+mechanical over-travel.
+
+F. OPTIONAL BATTERY MONITOR
+---------------------------
+GPIO39 / VN is the optional battery ADC input. Battery monitoring is disabled
+in the supplied firmware:
+    USE_BATTERY_SENSOR=false
+
+If you add it, use a correctly calculated resistor divider. Ensure the maximum
+voltage at GPIO39 remains within ESP32 ADC input limits. Connect battery
+negative to ESP32 GND. Configure the divider ratio and battery thresholds in
+firmware. Do not connect a battery directly to GPIO39.
+
+=================================================================
+PART 5 - TEXT CONNECTION DIAGRAM
+=================================================================
+
+                         ESP32 DEVKIT V1
+                    +----------------------+
+                    |                      |
+L298N ENA <---------| GPIO25               |
+L298N IN1 <---------| GPIO26               |
+L298N IN2 <---------| GPIO27               |
+L298N ENB <---------| GPIO33               |
+L298N IN3 <---------| GPIO14               |
+L298N IN4 <---------| GPIO13               |
+                    |                      |
+Brush driver IN <---| GPIO16               |
+LED driver IN <-----| GPIO17               |
+Spray driver IN <---| GPIO19               |
+Rig UP driver IN <--| GPIO21               |
+Rig DOWN driver <-- | GPIO22               |
+                    |                      |
+IR sensor OUT1 ---->| GPIO32               |
+IR sensor OUT2 ---->| GPIO34               |
+IR sensor OUT3 ---->| GPIO35               |
+IR sensor OUT4 ---->| GPIO36               |
+                    |                      |
+HC-SR04 TRIG <------| GPIO5                |
+HC-SR04 ECHO ------>| GPIO18 via divider   |
+                    |                      |
+IR sensor VCC <-----| 3V3                  |
+ALL LOGIC GND ------| GND                  |
+                    +----------------------+
+
+L298N OUT1/OUT2 -> Motor A
+L298N OUT3/OUT4 -> Motor B
+Motor battery + -> L298N motor supply +
+Motor battery - -> L298N GND
+ESP32 GND ------- L298N GND (common ground)
+
+Each attachment's power path:
+Separate load supply -> fuse -> relay/MOSFET power contacts -> load
+ESP32 GPIO -> relay/MOSFET logic input
+ESP32 GND -> driver GND (unless properly isolated driver design)
+
+Do not route motor or pump current through ESP32 board or breadboard tracks.
+
+=================================================================
+PART 6 - WEB BUTTON, MOTOR DIRECTION AND HIGH/LOW TABLE
+=================================================================
+
+A. CONTROL BUTTONS
+------------------
+MANUAL:
+    Enables manual movement-pad operation.
+
+AUTO LINE FOLLOW:
+    Enables automatic line tracking using the four IR sensor channels.
+
+WHITE LINE:
+    Selects raw sensor HIGH as the target line.
+
+BLACK LINE:
+    Selects raw sensor LOW as the target line.
+
+FORWARD (hold):
+    Motor A forward and Motor B forward.
+
+REVERSE (hold):
+    Motor A reverse and Motor B reverse.
+
+LEFT (hold):
+    Motor A forward and Motor B reverse (pivot).
+
+RIGHT (hold):
+    Motor A reverse and Motor B forward (pivot).
+
+STOP:
+    Stops both motors.
+
+EMERGENCY STOP:
+    Stops motors, sets emergency state, and turns every accessory OFF.
+
+SPEED SLIDER:
+    Sends speed 0..255. 0 is zero PWM; 255 is maximum requested PWM.
+
+BRUSH:
+    Latched toggle. Click once ON, click again OFF. GPIO16 HIGH/LOW.
+
+LED:
+    Latched toggle. Click once ON, click again OFF. GPIO17 HIGH/LOW.
+
+SPRAY:
+    Latched toggle. Click once ON, click again OFF. GPIO19 HIGH/LOW.
+
+RIG UP:
+    Momentary. GPIO21 HIGH only while held; LOW after release.
+
+RIG DOWN:
+    Momentary. GPIO22 HIGH only while held; LOW after release.
+
+DEVICE SELECTOR:
+    Selects the registered device_id. Only that device's token-authenticated
+    polling endpoint receives its commands.
+
+B. L298N DIRECTION TABLE
+------------------------
+Motor A:
+    ENA = GPIO25 (PWM)
+    IN1 = GPIO26
+    IN2 = GPIO27
+
+Motor B:
+    ENB = GPIO33 (PWM)
+    IN3 = GPIO14
+    IN4 = GPIO13
+
+WEB ACTION     MOTOR A IN1/IN2     MOTOR B IN3/IN4
+----------     ---------------     ---------------
+FORWARD        HIGH / LOW          HIGH / LOW
+REVERSE        LOW / HIGH          LOW / HIGH
+LEFT PIVOT     HIGH / LOW          LOW / HIGH
+RIGHT PIVOT    LOW / HIGH          HIGH / LOW
+STOP           LOW / LOW           LOW / LOW
+               PWM=0               PWM=0
+
+C. ATTACHMENT GPIO HIGH/LOW
+---------------------------
+GPIO16 Brush:
+    HIGH = Brush driver ON
+    LOW  = Brush driver OFF
+
+GPIO17 LED:
+    HIGH = LED driver ON
+    LOW  = LED driver OFF
+
+GPIO19 Spray:
+    HIGH = Spray driver ON
+    LOW  = Spray driver OFF
+
+GPIO21 Rig Up:
+    HIGH = Rig Up driver ON while button is held
+    LOW  = Rig Up driver OFF after release
+
+GPIO22 Rig Down:
+    HIGH = Rig Down driver ON while button is held
+    LOW  = Rig Down driver OFF after release
+
+GPIO5 / GPIO18:
+    HC-SR04 trigger/echo signals, not attachment power pins.
+GPIO32/34/35/36:
+    Digital sensor inputs, not outputs.
+GPIO39:
+    Optional analog battery input, disabled by default.
+
+=================================================================
+PART 7 - HOW TO CONFIGURE AND UPLOAD ESP32 FIRMWARE
+=================================================================
+
+A. Install Arduino IDE
+---------------------
+1. Install Arduino IDE.
+2. Open Preferences and configure the Espressif ESP32 boards package URL if
+   it is not already configured.
+3. Open Boards Manager.
+4. Search for ESP32 by Espressif Systems and install it.
+5. Connect ESP32 DevKit V1 by a data-capable USB cable.
+6. Select Tools > Board > ESP32 Arduino > ESP32 Dev Module.
+7. Select the correct COM port.
+
+B. Install required Arduino library
+-----------------------------------
+In Library Manager, install:
+    ArduinoJson
+
+The firmware includes:
+    WiFi.h
+    HTTPClient.h
+    WiFiClientSecure.h
+    ArduinoJson.h
+
+The first three are supplied by the ESP32 Arduino core.
+
+C. Create config.h
+------------------
+Inside:
+    firmware/StreetWatchESP32/
+
+Copy:
+    config.h.example
+
+Name the copy:
+    config.h
+
+The file must be in the same folder as StreetWatchESP32.ino.
+
+D. Edit config.h
+----------------
+Example:
+
+    #pragma once
+
+    #define WIFI_SSID "YOUR_WIFI_NAME"
+    #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
+    #define STREETWATCH_DEVICE_ID "rover-01"
+    #define STREETWATCH_DEVICE_TOKEN "PASTE_DEVICE_TOKEN_HERE"
+
+    #define STREETWATCH_SERVER "https://your-public-domain.example"
+
+    #define STREETWATCH_ROOT_CA "-----BEGIN CERTIFICATE-----\nPASTE_ROOT_CA_CERTIFICATE_HERE\n-----END CERTIFICATE-----\n"
+    #define STREETWATCH_INSECURE_TLS 0
+
+Change:
+- WIFI_SSID to the Wi-Fi network the ESP32 should join.
+- WIFI_PASSWORD to that network's password.
+- STREETWATCH_DEVICE_ID to the exact ID registered in Devices.
+- STREETWATCH_DEVICE_TOKEN to the token generated for that device.
+- STREETWATCH_SERVER to the website's base URL.
+
+The URL line to change is:
+    #define STREETWATCH_SERVER "https://your-public-domain.example"
+
+Do not append /api/device/command or /api/device/telemetry to the base URL.
+The firmware adds those API paths itself.
+
+E. HTTPS certificate
+--------------------
+For a public HTTPS site, set STREETWATCH_ROOT_CA to the correct root CA PEM
+certificate for the certificate chain used by your server. Keep:
+    #define STREETWATCH_INSECURE_TLS 0
+
+The template's certificate text is a placeholder, not a real certificate.
+Replace it before connecting over HTTPS.
+
+Setting STREETWATCH_INSECURE_TLS to 1 disables TLS certificate verification.
+That is only for temporary controlled testing and is unsafe on the public
+internet because a token could be intercepted. Do not use it for production.
+
+F. Upload
+---------
+1. Save config.h.
+2. Open StreetWatchESP32.ino in Arduino IDE.
+3. Confirm the config.h file is beside the sketch.
+4. Select ESP32 Dev Module.
+5. Select the ESP32 COM port.
+6. Upload.
+7. Open Serial Monitor at 115200 baud for debugging (the supplied firmware
+   currently provides minimal serial output).
+8. Confirm the ESP32 joins Wi-Fi and begins polling the server.
+9. Confirm the device becomes online in Devices and can be selected in Control.
+
+=================================================================
+PART 8 - ADDING MULTIPLE ESP32 DEVICES
+=================================================================
+
+Every physical ESP32 must have its own unique ID and token.
+
+Example device 1:
+    ID: rover-01
+    Name: Main Rover
+    Token: unique token generated by Devices
+    URL: https://streetwatch.example.com
+
+Example device 2:
+    ID: rover-02
+    Name: Backup Rover
+    Token: a different unique token
+    URL: https://streetwatch.example.com
+
+Example config for device 1:
+    #define STREETWATCH_DEVICE_ID "rover-01"
+    #define STREETWATCH_DEVICE_TOKEN "TOKEN_FOR_ROVER_01"
+    #define STREETWATCH_SERVER "https://streetwatch.example.com"
+
+Example config for device 2:
+    #define STREETWATCH_DEVICE_ID "rover-02"
+    #define STREETWATCH_DEVICE_TOKEN "TOKEN_FOR_ROVER_02"
+    #define STREETWATCH_SERVER "https://streetwatch.example.com"
+
+Procedure:
+1. Open website > Devices.
+2. Add rover-01 with its display name and website base URL.
+3. Copy its generated token.
+4. Configure and upload the firmware to ESP32 #1.
+5. Add rover-02 with a different ID and display name.
+6. Copy its generated token.
+7. Configure and upload the same firmware to ESP32 #2, changing only its
+   Wi-Fi credentials, device ID, token and URL if necessary.
+8. Repeat for each additional board.
+9. Open Control.
+10. Choose the desired rover in the Selected Device dropdown.
+
+The same firmware source can be reused. Each board needs its own config.h.
+Do not upload a configuration containing another device's token.
+
+The Devices page stores a URL for each device as website-side reference and
+displays a configuration snippet at device creation. Editing the URL in the
+Devices page does NOT rewrite the firmware on a remote ESP32. If the website
+address changes, update STREETWATCH_SERVER in that board's config.h and upload
+the firmware again.
+
+=================================================================
+PART 9 - CONNECTING FROM DIFFERENT NETWORKS
+=================================================================
+
+A. Same Wi-Fi / LAN testing
+---------------------------
+If the website PC and ESP32 are on the same Wi-Fi, the ESP32 can use the PC's
+LAN IPv4 address, for example:
+    http://192.168.1.10:5000
+
+Find the real PC address with:
+    ipconfig
+
+Use the PC's IPv4 address, not:
+    http://127.0.0.1:5000
+    http://localhost:5000
+
+localhost means the device itself. On an ESP32, localhost means the ESP32,
+not the PC.
+
+Make sure:
+- Flask is running.
+- The PC and ESP32 are on the same reachable LAN.
+- Windows Firewall permits the connection.
+- Wi-Fi client isolation is not blocking device-to-device traffic.
+
+B. Different networks / mobile data
+-----------------------------------
+For an ESP32 on a different Wi-Fi or mobile hotspot, the website must be
+available through a public server URL, preferably HTTPS, for example:
+    https://streetwatch.example.com
+
+The connection direction is:
+    ESP32 -> Internet -> Public StreetWatch server
+
+The website does not connect to the ESP32's private IP. The ESP32 makes
+outbound requests to:
+    /api/device/command
+    /api/device/telemetry
+
+Therefore:
+- No ESP32 router port-forwarding is required.
+- The server must have a public DNS/domain or public reachable address.
+- The server must be deployed securely.
+- HTTPS must have a valid certificate and matching root CA configured in
+  config.h.
+- The ESP32 Wi-Fi network must allow outbound access to the server.
+
+Do not expose Flask's development server directly to the public internet.
+Use a production WSGI server and an HTTPS reverse proxy or a trusted hosting
+platform. Secure the login, session secret, database, firewall and backups.
+
+C. Public tunnel
+----------------
+A secure tunnel can expose a local development server for controlled testing.
+Use a trusted tunnel provider and its HTTPS URL. Tunnel URLs may change unless
+a stable hostname is configured. Update STREETWATCH_SERVER and upload firmware
+again if the URL changes. A tunnel is not a substitute for production hosting.
+
+D. URL reminder
+---------------
+The URL is the website base URL, not an ESP32 IP.
+Example:
+    #define STREETWATCH_SERVER "https://streetwatch.example.com"
+
+The firmware adds API paths itself. Do not place /control or /api/device/command
+at the end of STREETWATCH_SERVER.
+
+=================================================================
+PART 10 - HOW THE DEVICE COMMUNICATION WORKS
+=================================================================
+
+1. ESP32 joins Wi-Fi using WIFI_SSID and WIFI_PASSWORD.
+2. Every 250 milliseconds, firmware attempts to poll:
+       GET /api/device/command
+   It sends its unique token in the HTTP header:
+       X-Device-Token: <device token>
+3. The website verifies the token and returns only that device's command,
+   mode, speed, line colour, emergency stop state and accessory states.
+4. The ESP32 applies the command to the motor driver and attachment drivers.
+5. Approximately every second, the ESP32 sends telemetry:
+       POST /api/device/telemetry
+   It includes its token and telemetry JSON.
+6. The website updates that device's last-seen time and status.
+7. The web page refreshes device status and telemetry.
+8. If the device becomes stale/offline, the backend resets movement to STOP
+   and accessory states OFF. The firmware also stops motors and switches
+   accessories off when its server request fails.
+
+The website considers a device online when last_seen is less than about
+10 seconds old. A device may take a few seconds to appear online after boot.
+
+=================================================================
+PART 11 - FIRST POWER-UP AND TEST PROCEDURE
+=================================================================
+
+Do not connect all loads and immediately drive the rover. Test in stages.
+
+STAGE 1 - Visual wiring inspection
+----------------------------------
+[ ] Motor battery disconnected.
+[ ] ESP32 USB disconnected while checking wiring.
+[ ] Confirm every GPIO wire matches the pin table.
+[ ] Confirm sensor VCC is 3V3.
+[ ] Confirm common GND.
+[ ] Confirm no 5V signal reaches ESP32 GPIO.
+[ ] Confirm HC-SR04 ECHO divider if ultrasonic is installed.
+[ ] Confirm L298N ENA/ENB jumpers are removed for PWM.
+[ ] Confirm attachment outputs go to driver inputs, not load terminals.
+[ ] Confirm physical lift limit switches and hardwired interlock.
+
+STAGE 2 - ESP32 only
+--------------------
+1. Connect ESP32 USB.
+2. Upload firmware.
+3. Confirm it joins Wi-Fi.
+4. Check Devices page for online status.
+5. Confirm the selected device appears in Control.
+6. Do not connect motor battery yet.
+
+STAGE 3 - L298N with wheels lifted
+----------------------------------
+1. Keep attachments disconnected.
+2. Connect motor battery to the L298N only after verifying polarity/voltage.
+3. Select the correct device in Control.
+4. Select Manual.
+5. Set low speed.
+6. Tap/hold Forward briefly.
+7. Verify both wheels turn in the intended forward direction.
+8. Test Reverse, Left, Right and Stop.
+9. If a wheel direction is wrong, disconnect power and swap that motor's
+   L298N output wires or correct firmware mapping.
+10. Test Emergency Stop.
+
+STAGE 4 - Sensor test
+--------------------
+1. Lift or disable drive power while calibrating sensors.
+2. Mount the line sensor parallel to the floor/track.
+3. Adjust the four potentiometers one at a time.
+4. Check each channel changes reliably between line and background.
+5. Verify the physical left-to-right order in telemetry.
+6. Try White line selection, then Black line selection.
+7. Use a track with strong IR reflectivity contrast.
+8. Only enable Auto after all four sensor channels are verified.
+
+STAGE 5 - Ultrasonic test
+-------------------------
+1. Verify HC-SR04 ECHO voltage divider before powering.
+2. Place a soft object in front of the sensor.
+3. Confirm distance telemetry.
+4. Confirm motor stop below the configured 16 cm threshold.
+5. If no HC-SR04 is installed, disable USE_ULTRASONIC_INTERLOCK in firmware.
+
+STAGE 6 - Attachments
+---------------------
+1. Keep actual loads disconnected.
+2. Use a multimeter or driver indicator to test each logic output.
+3. Brush GPIO16 should go HIGH when toggled ON and LOW when OFF.
+4. LED GPIO17 should go HIGH when toggled ON and LOW when OFF.
+5. Spray GPIO19 should go HIGH when toggled ON and LOW when OFF.
+6. Rig Up GPIO21 should be HIGH only while held.
+7. Rig Down GPIO22 should be HIGH only while held.
+8. Verify UP and DOWN cannot energize simultaneously.
+9. Add properly rated loads only after driver, fuse, limit switch and interlock
+   checks have passed.
+
+=================================================================
+PART 12 - TROUBLESHOOTING
+=================================================================
+
+ESP32 does not appear online:
+- Check Wi-Fi SSID/password.
+- Check the device ID and token match the Devices entry exactly.
+- Check STREETWATCH_SERVER spelling and base URL.
+- Check the server is running and publicly reachable.
+- Check HTTPS root CA certificate.
+- Check the X-Device-Token has not been regenerated/changed.
+- Check outbound internet access from the ESP32 network.
+- Wait several seconds and refresh Devices.
+- For same-LAN testing, use the PC LAN IPv4 address, not localhost.
+
+HTTP 401 / authentication failed:
+- The token is incorrect, missing or belongs to another device.
+- Copy the token for that device from the Devices creation result.
+- If lost, delete and recreate the device to generate a new token.
+- Update config.h and re-upload.
+
+Device appears offline:
+- The website has not received telemetry recently.
+- Check Wi-Fi signal and internet access.
+- Check server process and HTTPS certificate.
+- Check device token and URL.
+- Check that the ESP32 is not rebooting due to power instability.
+
+Website works on PC but not from another network:
+- 127.0.0.1 and localhost are not public addresses.
+- 192.168.x.x is normally private to a LAN.
+- Deploy the site to a public HTTPS server or use a properly configured tunnel.
+- Confirm DNS, firewall, HTTPS and server reverse proxy.
+
+Motors do not move:
+- Confirm device is online and selected.
+- Confirm Manual mode.
+- Check motor battery, L298N power and common ground.
+- Remove ENA/ENB jumpers if using PWM.
+- Check GPIO25/26/27 and GPIO33/14/13 wiring.
+- Check L298N motor supply voltage and current rating.
+- Test with wheels lifted.
+- Confirm emergency stop is not active.
+
+Motors run in the wrong direction:
+- Swap the two output wires for the affected motor with power disconnected.
+- Or update the firmware's direction logic.
+- Verify physical motor A/B positions match the assumptions.
+
+Auto mode stops immediately:
+- The sensor may not detect the selected line.
+- Check VCC, GND and OUT wiring.
+- Check the four sensor trimmers and sensor height.
+- Confirm white/black selection matches the actual digital output.
+- Check physical left-to-right channel order.
+- Check whether the optional ultrasonic sensor is reporting an obstacle.
+- If no HC-SR04 is installed, set USE_ULTRASONIC_INTERLOCK=false.
+
+Line following steers the wrong way:
+- Check sensor OUT1-to-OUT4 physical left-to-right order.
+- Check the LINE_PINS mapping.
+- Check which motor is physically left/right.
+- Check motor polarity and the chassis direction convention.
+
+Relay/attachment works backwards:
+- Supplied firmware assumes HIGH=ON and LOW=OFF.
+- Some relay boards are active-LOW. Verify the exact board.
+- Change/invert firmware logic if the relay module is active-LOW.
+- Never test with a high-current load until verified.
+
+Rig continues moving or does not stop:
+- Immediately use physical power disconnect.
+- Check the relay/driver wiring and software state.
+- Fit physical upper/lower limit switches.
+- Add hardwired UP/DOWN electrical interlock.
+- Never rely on browser or software alone for lift safety.
+
+Battery telemetry shows dash:
+- Battery monitoring is disabled by default.
+- Enable and wire the optional divider correctly before changing firmware.
+- Never connect battery voltage directly to GPIO39.
+
+Camera not visible:
+- USB camera must be connected to the computer running Flask.
+- Check operating-system camera permission.
+- Close other applications using the camera.
+- Try another USB port/cable.
+- ESP32 does not act as the USB webcam host.
+
+=================================================================
+PART 13 - PROJECT FILE MAP
+=================================================================
+
+Project root:
+    app.py
+        Flask application entry point.
+
+    requirements.txt
+        Python package list.
+
+    .env.example
+        Example environment configuration. Copy to .env and configure secrets.
+
+    templates/
+        base.html
+            Shared sidebar, top bar and page layout.
+        dashboard.html
+            Main dashboard.
+        control.html
+            ESP32 rover control.
+        devices.html
+            Multi-device registration and management.
+        monitoring.html
+            Host-connected webcam monitoring.
+        video_analysis.html
+            Video/webcam AI analysis.
+        echallan.html
+            E-Challan views.
+        violations.html
+            Violation records.
+        vehicles.html
+            Vehicle records.
+        reports.html
+            Aggregate reports.
+        login.html
+            Login page.
+
+    routes/
+        control.py
+            Web control, device registration, authenticated ESP32 command and
+            telemetry API endpoints.
+        monitoring.py
+            Live webcam monitoring routes.
+        video_analysis.py
+            Video analysis routes.
+        dashboard.py
+            Dashboard route/data.
+        violations.py
+            Violation management.
+        vehicles.py
+            Vehicle management.
+        echallan.py
+            Challan management.
+        reports.py
+            Report aggregation.
+        auth.py
+            Login/logout and authentication.
+
+    models/
+        device.py
+            ESP32 device database model.
+        user.py
+            User model.
+        vehicle.py
+            Vehicle record model.
+        alert.py
+            Alert model.
+
+    firmware/StreetWatchESP32/
+        StreetWatchESP32.ino
+            Main ESP32 firmware.
+        config.h.example
+            Template; copy to config.h and edit per board.
+        README.md
+            ESP32 setup/wiring overview.
+
+    CONTROL_SETUP.md
+        Local website and device setup notes.
+
+    CAMERA_AND_ATTACHMENTS_SETUP.md
+        Camera and attachment setup notes.
+
+=================================================================
+PART 14 - IMPORTANT CURRENT IMPLEMENTATION LIMITATIONS
+=================================================================
+
+1. The sidebar items Alerts, Settings and User Management are placeholder links
+   in the supplied base template. The Dashboard has a Recent Alerts panel, but
+   these three sidebar destinations are not complete standalone pages.
+
+2. Some Dashboard tiles/status labels are sample/demo values, not verified
+   hardware readings. Use the device-specific telemetry on Control/Devices
+   for actual ESP32 connection state.
+
+3. Battery percentage is not measured by default because
+   USE_BATTERY_SENSOR=false. It requires a correctly designed divider and
+   firmware configuration.
+
+4. The line sensor measures IR reflectivity, not RGB colour. White/black
+   selection means digital HIGH/LOW target selection for this module.
+
+5. The supplied firmware enables the HC-SR04 interlock. If the sensor is not
+   physically installed, disable USE_ULTRASONIC_INTERLOCK before relying on
+   the rover. An absent sensor is not a real obstacle detector.
+
+6. The website's device URL field does not remotely update firmware. Firmware
+   must be re-uploaded when STREETWATCH_SERVER changes.
+
+7. The local Flask development server is for development/testing. For a
+   different-network installation, deploy using a secure production setup.
+
+8. The firmware and backend implement prototype command/telemetry handling.
+   Physical hardware behaviour depends on exact module revisions, wiring,
+   motor polarity, relay logic, power design and mechanical construction.
+   Bench-test every function before normal use.
+
+9. The website should be protected with strong account passwords, a strong
+   Flask secret key, HTTPS, secure database backups and private device tokens.
+
+=================================================================
+FINAL QUICK CHECKLIST
+=================================================================
+
+WEBSITE
+[ ] Extract project ZIP.
+[ ] Create Python virtual environment.
+[ ] Install requirements.
+[ ] Copy .env.example to .env and set secure values.
+[ ] Start python app.py for local testing.
+[ ] Sign in and change default passwords.
+[ ] Deploy publicly with HTTPS for different-network ESP32 access.
+
+EACH ESP32
+[ ] Add unique device ID in Devices.
+[ ] Copy its unique token.
+[ ] Copy config.h.example to config.h.
+[ ] Set Wi-Fi SSID/password.
+[ ] Set device ID and token.
+[ ] Set STREETWATCH_SERVER to the website base URL.
+[ ] Set valid root CA for HTTPS.
+[ ] Upload firmware.
+[ ] Confirm online in Devices.
+
+HARDWARE
+[ ] ESP32 GND and driver/sensor grounds common.
+[ ] L298N ENA/ENB wiring/jumpers checked.
+[ ] Correct motor battery and polarity.
+[ ] IR sensor powered from 3V3.
+[ ] IR outputs wired left-to-right and calibrated.
+[ ] HC-SR04 ECHO level-shifted if installed.
+[ ] Attachments use suitable drivers, separate power and fuses.
+[ ] Lift limit switches and hardwired UP/DOWN interlock fitted.
+[ ] Physical emergency power disconnect available.
+[ ] Wheels lifted for first movement test.
+[ ] Manual controls tested before Auto.
+[ ] Auto tested on a closed, controlled track.
+
+END OF GUIDE
+============
+
+This guide describes the supplied StreetWatch Neo multi-device project.
+Always check the labels and datasheets for the exact hardware modules you own.
+If a board revision differs from this pin map, stop and verify it before
+applying power.

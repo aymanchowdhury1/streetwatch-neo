@@ -1,0 +1,73 @@
+STREETWATCH NEO — BEGINNER DEPLOYMENT GUIDE
+===========================================
+
+1. WHAT YOU NEED
+----------------
+- GitHub account (free)
+- Render account (free web service for initial testing)
+- ESP32 DevKit V1 and rover hardware
+- Arduino IDE with ESP32 board support and ArduinoJson 7
+- A public Render HTTPS URL
+
+2. GITHUB
+---------
+- Extract streetwatch-neo.zip.
+- Open GitHub Desktop and sign in.
+- Add the extracted project as a local repository.
+- Check the Changes list. Never add .env, firmware/StreetWatchESP32/config.h,
+  streetwatch.db, tokens, Wi-Fi passwords, uploads or private keys.
+- Commit and Publish to GitHub. Private repository is recommended.
+- Push future changes to main.
+
+3. RENDER
+---------
+- Connect GitHub to Render.
+- Create a Blueprint from render.yaml or create a Python Web Service.
+- Build: pip install -r requirements.txt
+- Start: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile -
+- Health path: /healthz
+- Set INITIAL_ADMIN_USERNAME and a unique INITIAL_ADMIN_PASSWORD.
+- Set DATABASE_URL to a PostgreSQL database URL.
+- SECRET_KEY and WTF_CSRF_SECRET_KEY must be random, separate secrets.
+- Deploy and test /healthz before configuring the ESP32.
+
+IMPORTANT: Render Free web services sleep after 15 minutes idle and have
+ephemeral storage. Free Render Postgres is limited and expires after 30 days.
+A free Render-only configuration is not permanent durable storage. Back up
+records and use a durable database for continued use.
+
+4. REGISTER AN ESP32
+--------------------
+- Sign in to StreetWatch as admin.
+- Open Devices and add a unique Device ID and name.
+- Use the Render HTTPS base URL.
+- Copy the device token once and keep it secret.
+- Flash the updated ESP32 firmware.
+
+5. PHONE AP SETUP
+-----------------
+- Power the ESP32. If unconfigured, it starts STREETWATCH-SETUP.
+- Phone joins STREETWATCH-SETUP.
+- WPA2 password: SWneo- plus the final 6 hexadecimal characters of ESP32 MAC.
+- Open http://192.168.4.1.
+- Enter Wi-Fi SSID/password, Render URL, Device ID and token.
+- Save. ESP32 restarts and joins the router.
+- Hold GPIO4 button to GND for 4 seconds to reopen setup.
+
+6. REMOTE CONTROL
+-----------------
+Phone/PC on one network -> Internet -> Render HTTPS <- Internet <- ESP32
+on another network. No PC-on-at-home requirement or port forwarding is used.
+Every ESP32 has its own ID and token. Select the device in Control.
+
+7. SAFETY
+---------
+Raise wheels before testing. Check motor direction, obstacle stop, Wi-Fi loss
+and stale-command stop. Keep a physical emergency stop and separate motor
+power disconnect. Never drive a robot based only on cloud commands.
+
+8. SECURITY
+-----------
+Never commit .env, config.h, device tokens or Wi-Fi passwords. Rotate any
+credential previously shared or included in an archive. Use HTTPS only.
+Device token rotation invalidates the old token immediately.

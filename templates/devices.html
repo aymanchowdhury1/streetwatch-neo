@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}ESP32 Devices{% endblock %}
+{% block page_title %}ESP32 Device Manager{% endblock %}
+{% block extra_head %}
+<style>
+.devices-wrap{max-width:1100px;margin:0 auto}.device-form{display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:10px;align-items:end;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px}.device-form label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:5px}.device-form input{width:100%;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:10px}.device-form button,.device-action{background:var(--accent-cyan);color:#07131d;border:0;border-radius:7px;padding:10px 14px;font-weight:800;cursor:pointer}.device-list{display:grid;gap:12px;margin-top:16px}.device-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px}.device-head{display:flex;justify-content:space-between;gap:10px;align-items:center}.device-head h3{margin:0;color:var(--text-primary)}.muted{font-size:11px;color:var(--text-muted)}.status-pill{display:inline-flex;padding:5px 9px;border-radius:20px;font-size:10px;font-weight:800;background:var(--bg-secondary)}.status-pill.online{color:var(--accent-green)}.status-pill.offline{color:var(--accent-red)}.device-card input{width:min(600px,100%);background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);padding:8px;border-radius:6px}.device-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.danger{background:var(--accent-red);color:white}.setup-code{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-primary);padding:12px;border-radius:8px;color:var(--text-primary);font:11px/1.5 monospace}.token-note{color:var(--accent-orange);font-size:11px}.guide-card{margin:14px 0;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);line-height:1.55}@media(max-width:800px){.device-form{grid-template-columns:1fr}.device-form .wide{grid-column:auto}}
+</style>{% endblock %}
+{% block content %}
+<div class="devices-wrap">
+ <p class="muted">Register each ESP32 separately. Each device connects outward to this public HTTPS website, so devices and your phone can use different Wi-Fi networks. Never use localhost for a remotely hosted device.</p>
+ <div class="guide-card"><strong>Phone setup:</strong> Flash the updated firmware once. Hold the ESP32 SETUP button (GPIO4 to GND) for 4 seconds, connect your phone to <b>STREETWATCH-SETUP</b>, then open <b>http://192.168.4.1</b>. The WPA2 password is <code>SWneo-</code> plus the last 6 characters of the ESP32 MAC address. Enter Wi-Fi, server URL, device ID and token.</div>
+ <form class="device-form" id="addDeviceForm">
+  <div><label for="deviceIdInput">Unique device ID</label><input id="deviceIdInput" required maxlength="80" placeholder="streetwatch-rover-02"></div>
+  <div><label for="deviceNameInput">Display name</label><input id="deviceNameInput" required maxlength="120" placeholder="North Gate Rover"></div>
+  <div class="wide"><label for="serverUrlInput">Public website HTTPS URL</label><input id="serverUrlInput" required type="url" placeholder="https://your-app.onrender.com"></div>
+  <button type="submit">ADD DEVICE</button>
+ </form>
+ <p class="token-note">A device token is displayed only once after registration or rotation. Copy it directly into the ESP32 setup portal and store it securely. It is never shown in the device list.</p>
+ <div id="deviceList" class="device-list"><div class="device-card muted">Loading devices…</div></div>
+ <div id="newDevice" class="device-card" hidden></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(()=>{
+ const $=id=>document.getElementById(id);let devices=[];
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{'Content-Type':'application/json','X-CSRFToken':document.querySelector('meta[name=csrf-token]')?.content||'',...(opts.headers||{})}});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+ function render(){
+  $('deviceList').innerHTML=devices.length?devices.map(d=>`<article class="device-card"><div class="device-head"><h3>${esc(d.name)} <span class="muted">(${esc(d.device_id)})</span></h3><span class="status-pill ${d.connected?'online':'offline'}">${d.connected?'ONLINE':'OFFLINE'}</span></div><p class="muted">Last contact: ${d.last_seen_seconds==null?'Never':Math.round(d.last_seen_seconds)+' seconds ago'} · Firmware: ${esc(d.firmware||'Not reported')}</p><label class="muted" for="name-${d.id}">Display name</label><div><input id="name-${d.id}" value="${esc(d.name)}" maxlength="120"></div><label class="muted" for="url-${d.id}">Website server URL</label><div><input id="url-${d.id}" type="url" value="${esc(d.server_url)}"></div><div class="device-actions"><button class="device-action" data-save="${d.id}">SAVE DETAILS</button><button class="device-action" data-rotate="${d.id}">REVOKE & ROTATE TOKEN</button><button class="device-action danger" data-delete="${d.id}">REMOVE DEVICE</button></div></article>`).join(''):'<div class="device-card muted">No ESP32 devices registered yet. Add your first device above.</div>';
+  document.querySelectorAll('[data-save]').forEach(b=>b.onclick=async()=>{try{const prior=devices.find(d=>String(d.id)===String(b.dataset.save));const nextUrl=$('url-'+b.dataset.save).value;const urlChanged=prior&&prior.server_url!==nextUrl;await api('/api/robot/devices/'+b.dataset.save,{method:'PATCH',body:JSON.stringify({name:$('name-'+b.dataset.save).value,server_url:nextUrl})});alert(urlChanged?'Device details saved. Reopen the ESP32 setup portal and update its server URL too.':'Device details saved.');load();}catch(e){alert(e.message)}});
+  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this device? Its token will be revoked immediately.'))return;try{await api('/api/robot/devices/'+b.dataset.delete,{method:'DELETE'});load();}catch(e){alert(e.message)}});
+  document.querySelectorAll('[data-rotate]').forEach(b=>b.onclick=async()=>{if(!confirm('Revoke the current token now? The ESP32 will stop authenticating until you enter the new token in its setup portal.'))return;try{const d=await api('/api/robot/devices/'+b.dataset.rotate+'/rotate-token',{method:'POST'});showToken(d.device_id,d.token,d.server_url);}catch(e){alert(e.message)}});
+ }
+ function showToken(id,token,serverUrl){const box=$('newDevice');box.hidden=false;box.innerHTML=`<h3>Secure setup credentials — ${esc(id)}</h3><p class="token-note">Copy now. The token will not be displayed again. Keep it private.</p><pre class="setup-code" id="tokenConfig"></pre><button class="device-action" id="copyConfig">COPY SETUP DETAILS</button>`;$('tokenConfig').textContent='Device ID: '+id+'\nDevice token: '+token+'\nServer URL: '+(serverUrl||$('serverUrlInput').value.trim());$('copyConfig').onclick=async()=>{try{await navigator.clipboard.writeText('Device ID: '+id+'\nDevice token: '+token+'\nServer URL: '+$('serverUrlInput').value.trim());alert('Copied. Paste these values into the ESP32 setup page.');}catch(e){alert('Clipboard unavailable. Select and copy the text manually.')}};box.scrollIntoView({behavior:'smooth',block:'center'});}
+ async function load(){try{devices=await api('/api/robot/devices');render();}catch(e){$('deviceList').textContent=e.message;}}
+ $('addDeviceForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('/api/robot/devices',{method:'POST',body:JSON.stringify({device_id:$('deviceIdInput').value.trim(),name:$('deviceNameInput').value.trim(),server_url:$('serverUrlInput').value.trim()})});showToken(d.device.device_id,d.token,d.device.server_url);$('deviceIdInput').value='';$('deviceNameInput').value='';load();}catch(err){alert(err.message)}});
+ load();setInterval(load,15000);
+})();
+</script>
+{% endblock %}

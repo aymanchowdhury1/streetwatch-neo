@@ -1,0 +1,5 @@
+# Optional local video-analysis extras; heavy for Render Free memory limits.
+-r requirements.txt
+ultralytics>=8.2
+easyocr>=1.7
+imutils>=0.5

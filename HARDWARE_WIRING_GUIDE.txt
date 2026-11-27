@@ -1,0 +1,89 @@
+STREETWATCH NEO — HARDWARE WIRING GUIDE
+======================================
+
+CONTROLLER
+----------
+ESP32 DevKit V1. Use a regulated 5 V supply suitable for the ESP32 board.
+All low-voltage control electronics must share a common ground unless an
+isolated interface is deliberately designed.
+
+L298N DUAL MOTOR DRIVER
+----------------------
+L298N ENA  -> ESP32 GPIO25 (PWM, remove ENA jumper)
+L298N IN1  -> ESP32 GPIO26
+L298N IN2  -> ESP32 GPIO27
+L298N ENB  -> ESP32 GPIO33 (PWM, remove ENB jumper)
+L298N IN3  -> ESP32 GPIO14
+L298N IN4  -> ESP32 GPIO13
+Motor A/B outputs -> motors
+Motor supply -> separate appropriately rated motor battery/supply
+Logic supply -> according to the L298N module requirements
+ESP32 GND, driver logic GND and supply negative -> common ground
+
+IR LINE TRACKER (4 CHANNELS)
+----------------------------
+OUT1 (leftmost)  -> GPIO32
+OUT2              -> GPIO34
+OUT3              -> GPIO35
+OUT4 (rightmost) -> GPIO36
+VCC -> sensor's rated supply; GND -> common ground.
+GPIO34, GPIO35 and GPIO36 are input-only ESP32 pins. Do not use them as outputs.
+
+HC-SR04 ULTRASONIC SENSOR
+------------------------
+TRIG -> GPIO5
+ECHO -> GPIO18 THROUGH A RESISTOR VOLTAGE DIVIDER
+VCC -> 5 V (module dependent)
+GND -> common ground
+The HC-SR04 ECHO output may be 5 V. NEVER connect it directly to the ESP32.
+Use a correctly calculated divider/level shifter to keep the GPIO input <=3.3 V.
+
+ACCESSORY CONTROL OUTPUTS
+-------------------------
+Brush relay/MOSFET input -> GPIO16
+LED relay/MOSFET input   -> GPIO17
+Spray relay/MOSFET input -> GPIO19
+Rig Up driver input      -> GPIO21
+Rig Down driver input    -> GPIO22
+
+GPIO outputs are logic signals only. Never power a motor, pump, lamp, relay
+coil or other high-current load directly from an ESP32 pin. Use appropriately
+rated MOSFETs/relays, flyback protection for inductive loads, fuses and
+separate load power supplies. Verify relay active-high/active-low behavior
+before connecting the loads.
+
+OPTIONAL BATTERY MONITOR
+------------------------
+Battery divider output -> GPIO39 (ADC input only)
+Firmware battery reading is disabled by default. Set USE_BATTERY_SENSOR only
+after designing/calibrating a divider for the actual battery's maximum voltage.
+Never exceed the ESP32 ADC pin voltage.
+
+SETUP BUTTON
+------------
+Momentary normally-open button between GPIO4 and GND.
+Hold for 4 seconds to reopen the phone setup portal.
+GPIO4 uses INPUT_PULLUP in firmware.
+
+POWER AND SAFETY
+----------------
+1. Use separate, correctly rated supplies for motors/accessories and logic.
+2. Connect grounds together where non-isolated driver interfaces require it.
+3. Use a fuse close to each battery positive terminal.
+4. Fit suitable flyback protection and transient suppression.
+5. Add mechanical lift limit switches and an electrical interlock so Rig Up
+   and Rig Down cannot energize together, even if software fails.
+6. Install a physical emergency stop that interrupts motor-driver power
+   independently of Wi-Fi, Render, Flask, firmware or the browser.
+7. Secure wiring, insulate terminals and prevent water ingress.
+8. Verify polarity, current ratings, thermal limits and motor stall current.
+9. Raise wheels off the ground, disconnect accessories, and test direction,
+   stop, obstacle interlock, Wi-Fi loss and emergency stop before floor use.
+
+GPIO5 is an ESP32 strapping pin on common ESP32 modules; keep the attached
+TRIG input from forcing an invalid level during reset and verify cold boot
+reliability with the actual sensor/module. GPIO16/17 may be reserved on some
+PSRAM-equipped WROVER variants; the stated map assumes a typical WROOM DevKit.
+
+The GPIO map preserves the supplied project's pinout. Confirm the exact
+ESP32 board and driver module before wiring; board variants may differ.

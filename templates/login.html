@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — StreetWatch Neo</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body>
+<div class="login-page-wrap">
+  <div class="login-main">
+    <!-- LEFT PANEL -->
+    <div class="login-left">
+      <div class="login-brand">
+        <div class="app-name">StreetWatch <span class="neo">Neo</span></div>
+        <div class="tagline">Smart Roads, Safe Future</div>
+      </div>
+
+      <ul class="feature-list">
+        <li>
+          <div class="feature-icon" style="background:rgba(34,197,94,0.15);color:var(--accent-green);">
+            <i class="fas fa-video"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">AI-Powered CCTV Monitoring</div>
+            <div style="font-size:12px;">Real-time detection across 8 road cameras</div>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon" style="background:rgba(239,68,68,0.15);color:var(--accent-red);">
+            <i class="fas fa-exclamation-triangle"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">Automated Violation Detection</div>
+            <div style="font-size:12px;">Overspeeding, no helmet, signal jumping & more</div>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon" style="background:rgba(26,86,219,0.15);color:var(--accent-blue);">
+            <i class="fas fa-file-invoice"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">Digital E-Challan System</div>
+            <div style="font-size:12px;">Instant challan generation with print support</div>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon" style="background:rgba(6,182,212,0.15);color:var(--accent-cyan);">
+            <i class="fas fa-map-marked-alt"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">Live Road Mapping</div>
+            <div style="font-size:12px;">Leaflet-based map with Panchagarh road data</div>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon" style="background:rgba(139,92,246,0.15);color:var(--accent-purple);">
+            <i class="fas fa-chart-bar"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">Traffic Analytics & Reports</div>
+            <div style="font-size:12px;">Hourly traffic flows, violation trends, heatmaps</div>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon" style="background:rgba(245,158,11,0.15);color:var(--accent-orange);">
+            <i class="fas fa-robot"></i>
+          </div>
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">Smart Cleaning System</div>
+            <div style="font-size:12px;">Automated road cleaning robot coordination</div>
+          </div>
+        </li>
+      </ul>
+
+      <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="bd-flag" style="width:24px;height:16px;"></span>
+          <span style="font-size:12px;color:var(--text-muted);">Developed for District Administration, Panchagarh, Bangladesh</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="login-right">
+      <div class="login-card">
+        <div class="login-title">Welcome Back</div>
+        <div class="login-subtitle">Sign in to access the StreetWatch <span class="neo">Neo</span> portal</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-msg {{ category }}" style="margin-bottom:16px;">
+                <i class="fas fa-{% if category == 'success' %}check-circle{% else %}times-circle{% endif %}"></i>
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.login') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}"/>
+
+          <div class="form-group">
+            <label class="form-label" for="username">
+              <i class="fas fa-user" style="margin-right:5px;"></i>Username
+            </label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              class="form-input-full"
+              placeholder="Enter your username"
+              autocomplete="username"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="password">
+              <i class="fas fa-lock" style="margin-right:5px;"></i>Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input-full"
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;">
+              <input type="checkbox" name="remember" style="accent-color:var(--accent-blue);"/>
+              Remember me
+            </label>
+            <a href="#" style="font-size:12px;color:var(--text-muted);">Forgot password?</a>
+          </div>
+
+          <button type="submit" class="btn-login">
+            <i class="fas fa-sign-in-alt"></i> &nbsp; Sign In
+          </button>
+        </form>
+
+        <button class="btn-sso" onclick="alert('Government SSO integration coming soon.')">
+          <span class="bd-flag" style="width:18px;height:12px;"></span>
+          Login with Government SSO
+        </button>
+
+        <p style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);text-align:center;">
+          Sign in with the administrator account configured for this installation.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER BAR -->
+  <div class="login-footer-bar">
+    District Administration Panchagarh &nbsp;|&nbsp; +8801799104366 &nbsp;|&nbsp;
+    ictsectionpanchagarh@gmail.com &nbsp;|&nbsp; panchagarh.gov.bd
+    &nbsp;&nbsp;|&nbsp;&nbsp; StreetWatch <span class="neo">Neo</span> v1.0
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const usernameInput = document.getElementById('username');
+  if (usernameInput) usernameInput.focus();
+});
+</script>
+</body>
+</html>

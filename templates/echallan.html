@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}E-Challan{% endblock %}
+{% block page_title %}E-Challan Management{% endblock %}
+
+{% block content %}
+
+<!-- SUMMARY -->
+<div style="display:flex;gap:16px;margin-bottom:20px;align-items:center;">
+  <div class="stat-card" style="flex:1;max-width:220px;">
+    <div class="stat-icon purple"><i class="fas fa-file-invoice"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" data-count="{{ challans|length }}">{{ challans|length }}</div>
+      <div class="stat-label">Total Challans</div>
+    </div>
+  </div>
+  <div class="stat-card" style="flex:1;max-width:220px;">
+    <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
+    <div class="stat-body">
+      <div class="stat-value" data-count="{{ challans_today }}">{{ challans_today }}</div>
+      <div class="stat-label">Issued Today</div>
+    </div>
+  </div>
+  <div style="margin-left:auto;font-size:12px;color:var(--text-muted);">
+    <i class="fas fa-info-circle" style="margin-right:4px;"></i>
+    Click "Print" to view official challan document
+  </div>
+</div>
+
+{% if challans %}
+<div class="challan-grid">
+  {% for v in challans %}
+  <div class="challan-card">
+    <div class="challan-number">
+      <i class="fas fa-hashtag" style="margin-right:4px;"></i>{{ v.challan_number }}
+    </div>
+
+    <div class="challan-row">
+      <span class="challan-key">Plate Number</span>
+      <span class="challan-val" style="font-family:'Rajdhani',sans-serif;color:var(--accent-cyan);font-size:14px;font-weight:700;">
+        {{ v.plate_number }}
+      </span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Violation</span>
+      <span class="challan-val">
+        <span class="badge
+          {% if v.violation_type == 'Overspeeding' %}badge-overspeeding
+          {% elif v.violation_type == 'No Helmet' %}badge-no-helmet
+          {% elif v.violation_type == 'No Parking' %}badge-no-parking
+          {% elif v.violation_type == 'Signal Jumping' %}badge-signal
+          {% elif v.violation_type == 'Wrong Lane' %}badge-wrong-lane
+          {% else %}badge-none{% endif %}">
+          {{ v.violation_type or '—' }}
+        </span>
+      </span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Speed</span>
+      <span class="challan-val
+        {% if v.speed_kmh > 90 %}text-red{% elif v.speed_kmh > 60 %}text-orange{% else %}text-green{% endif %}">
+        {{ '%.1f'|format(v.speed_kmh) }} km/h
+      </span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Location</span>
+      <span class="challan-val" style="font-size:11px;">{{ v.location }}</span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Camera</span>
+      <span class="challan-val" style="font-size:11px;">{{ v.camera_id }}</span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Date &amp; Time</span>
+      <span class="challan-val" style="font-size:11px;">{{ v.detected_at.strftime('%d %b %Y, %H:%M') }}</span>
+    </div>
+    <div class="challan-row">
+      <span class="challan-key">Status</span>
+      <span class="badge badge-success"><i class="fas fa-check" style="margin-right:3px;"></i>Issued</span>
+    </div>
+
+    <div style="margin-top:14px;">
+      <a href="{{ url_for('echallan.challan_detail', challan_number=v.challan_number) }}"
+         class="btn btn-primary btn-sm" style="width:100%;justify-content:center;" target="_blank">
+        <i class="fas fa-print"></i> Print Challan
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <i class="fas fa-file-invoice"></i>
+    <p>No challans have been issued yet.</p>
+    <p style="margin-top:8px;font-size:12px;">Go to <a href="{{ url_for('violations.index') }}">Violations</a> to issue challans.</p>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function now() { return new Date(); }
+</script>
+{% endblock %}

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Violations{% endblock %}
+{% block page_title %}Violation Records{% endblock %}
+
+{% block content %}
+
+<!-- FILTER TABS -->
+<div class="tabs">
+  <a href="{{ url_for('violations.index') }}"
+     class="tab-btn {% if not filter_type %}active{% endif %}">
+    All Violations
+  </a>
+  {% for vtype in violation_types %}
+  <a href="{{ url_for('violations.index', type=vtype) }}"
+     class="tab-btn {% if filter_type == vtype %}active{% endif %}">
+    {% if vtype == 'Overspeeding' %}<i class="fas fa-tachometer-alt"></i>
+    {% elif vtype == 'No Helmet' %}<i class="fas fa-hard-hat"></i>
+    {% elif vtype == 'No Parking' %}<i class="fas fa-parking"></i>
+    {% elif vtype == 'Signal Jumping' %}<i class="fas fa-traffic-light"></i>
+    {% elif vtype == 'Wrong Lane' %}<i class="fas fa-exchange-alt"></i>
+    {% endif %}
+    {{ vtype }}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- SUMMARY BAR -->
+<div style="display:flex;gap:16px;margin-bottom:16px;font-size:12px;color:var(--text-muted);">
+  <span>
+    <i class="fas fa-list" style="margin-right:4px;"></i>
+    Showing <strong style="color:var(--text-primary);">{{ pagination.total }}</strong> violations
+    {% if filter_type %} — filtered by <strong style="color:var(--accent-orange);">{{ filter_type }}</strong>{% endif %}
+  </span>
+  <span style="margin-left:auto;">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+</div>
+
+<!-- TABLE -->
+<div class="card">
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Plate Number</th>
+          <th>Detected At</th>
+          <th>Speed (km/h)</th>
+          <th>Location</th>
+          <th>Violation Type</th>
+          <th>Camera</th>
+          <th>Challan Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vehicles %}
+        <tr>
+          <td style="color:var(--text-muted);">{{ loop.index + (pagination.page - 1) * 20 }}</td>
+          <td>
+            <span style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--accent-cyan);">
+              {{ v.plate_number }}
+            </span>
+          </td>
+          <td style="color:var(--text-secondary);">{{ v.detected_at.strftime('%d %b %Y, %H:%M') }}</td>
+          <td>
+            <span class="{% if v.speed_kmh > 90 %}speed-red{% elif v.speed_kmh > 60 %}speed-orange{% else %}speed-green{% endif %}">
+              {{ '%.1f'|format(v.speed_kmh) }}
+            </span>
+          </td>
+          <td style="font-size:12px;color:var(--text-secondary);">{{ v.location }}</td>
+          <td>
+            <span class="badge
+              {% if v.violation_type == 'Overspeeding' %}badge-overspeeding
+              {% elif v.violation_type == 'No Helmet' %}badge-no-helmet
+              {% elif v.violation_type == 'No Parking' %}badge-no-parking
+              {% elif v.violation_type == 'Signal Jumping' %}badge-signal
+              {% elif v.violation_type == 'Wrong Lane' %}badge-wrong-lane
+              {% endif %}">
+              <i class="fas
+                {% if v.violation_type == 'Overspeeding' %}fa-tachometer-alt
+                {% elif v.violation_type == 'No Helmet' %}fa-hard-hat
+                {% elif v.violation_type == 'No Parking' %}fa-parking
+                {% elif v.violation_type == 'Signal Jumping' %}fa-traffic-light
+                {% elif v.violation_type == 'Wrong Lane' %}fa-exchange-alt
+                {% endif %}" style="margin-right:4px;"></i>
+              {{ v.violation_type }}
+            </span>
+          </td>
+          <td style="font-size:12px;color:var(--text-muted);">{{ v.camera_id }}</td>
+          <td>
+            {% if v.challan_issued %}
+              <span class="badge badge-success">
+                <i class="fas fa-check" style="margin-right:3px;"></i>
+                {{ v.challan_number }}
+              </span>
+            {% else %}
+              <span class="badge badge-warning">Pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if not v.challan_issued %}
+            <form method="POST" action="{{ url_for('echallan.issue', vehicle_id=v.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <button type="submit" class="btn btn-sm"
+                style="background:var(--gradient-btn);color:#fff;border:none;"
+                onclick="return confirm('Issue challan for {{ v.plate_number }}?')">
+                <i class="fas fa-file-invoice"></i> Issue Challan
+              </button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('echallan.challan_detail', challan_number=v.challan_number) }}"
+               class="btn btn-outline btn-sm">
+              <i class="fas fa-print"></i> Print
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9">
+            <div class="empty-state">
+              <i class="fas fa-exclamation-triangle"></i>
+              <p>No violations found{% if filter_type %} for "{{ filter_type }}"{% endif %}.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGINATION -->
+{% if pagination.pages > 1 %}
+<div class="pagination">
+  {% if pagination.has_prev %}
+  <a href="{{ url_for('violations.index', page=pagination.prev_num, type=filter_type) }}" class="page-btn">
+    <i class="fas fa-chevron-left"></i>
+  </a>
+  {% else %}
+  <span class="page-btn disabled"><i class="fas fa-chevron-left"></i></span>
+  {% endif %}
+
+  {% for p in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
+    {% if p %}
+    <a href="{{ url_for('violations.index', page=p, type=filter_type) }}"
+       class="page-btn {% if p == pagination.page %}active{% endif %}">{{ p }}</a>
+    {% else %}
+    <span class="page-btn" style="cursor:default;">…</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if pagination.has_next %}
+  <a href="{{ url_for('violations.index', page=pagination.next_num, type=filter_type) }}" class="page-btn">
+    <i class="fas fa-chevron-right"></i>
+  </a>
+  {% else %}
+  <span class="page-btn disabled"><i class="fas fa-chevron-right"></i></span>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

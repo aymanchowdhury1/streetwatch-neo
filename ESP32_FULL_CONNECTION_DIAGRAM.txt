@@ -1,0 +1,125 @@
+STREETWATCH NEO - ESP32 DEVKIT V1 FULL CONNECTION DIAGRAM
+========================================================
+Board: ESP32 DevKit V1 (30-pin / 38-pin equivalent GPIO names)
+Motor driver: L298N dual H-bridge
+Line sensor: OpenJumper 4-channel digital IR line tracker
+Optional distance sensor: HC-SR04
+IMPORTANT: Verify the labels printed on your actual modules before applying power.
+
+1) POWER AND COMMON GROUND
+--------------------------
+A. ESP32 USB: use a stable USB 5V supply while programming/testing.
+B. L298N motor supply (+12V/Vmotor): connect to a separate motor battery of the
+   correct voltage for your motors. Do not power motors from the ESP32 3V3 pin.
+C. L298N GND: connect to battery negative AND ESP32 GND.
+D. Sensor GND: connect to ESP32 GND.
+E. Relay/MOSFET driver GND: connect to ESP32 GND (unless an isolated driver
+   module explicitly requires isolated wiring).
+F. All logic signals need a common reference ground.
+G. Do not connect a motor battery voltage to an ESP32 GPIO or 3V3 pin.
+
+2) L298N MOTOR DRIVER
+--------------------
+ESP32 GPIO25  ---> L298N ENA (remove ENA jumper to use PWM speed control)
+ESP32 GPIO26  ---> L298N IN1
+ESP32 GPIO27  ---> L298N IN2
+ESP32 GPIO33  ---> L298N ENB (remove ENB jumper to use PWM speed control)
+ESP32 GPIO14  ---> L298N IN3
+ESP32 GPIO13  ---> L298N IN4
+ESP32 GND     ---> L298N GND
+Motor battery + ---> L298N +12V / Vs / motor supply input (check board label)
+Motor battery - ---> L298N GND
+Front/left-designated motor ---> L298N OUT1 and OUT2 (Motor A)
+Rear/right-designated motor  ---> L298N OUT3 and OUT4 (Motor B)
+L298N 5V logic terminal: follow the exact jumper/regulator instructions printed
+on your L298N board. Never connect its 5V terminal to ESP32 3V3. Do not feed
+5V into ESP32 GPIO. With ENA/ENB jumpers removed, drive enable is PWM-controlled.
+If a motor turns the wrong way, switch that motor's two output wires.
+
+3) OPENJUMPER 4-CHANNEL DIGITAL IR LINE SENSOR
+------------------------------------------------
+Sensor VCC  ---> ESP32 3V3 (recommended for safe 3.3V output logic)
+Sensor GND  ---> ESP32 GND
+Sensor OUT1 (physical LEFT sensor after mounting)  ---> ESP32 GPIO32
+Sensor OUT2                                      ---> ESP32 GPIO34
+Sensor OUT3                                      ---> ESP32 GPIO35
+Sensor OUT4 (physical RIGHT sensor after mounting) ---> ESP32 GPIO36 / VP
+
+Check the sensor PCB's printed pin labels. Do not assume the connector order if
+its orientation differs. GPIO34, GPIO35 and GPIO36 are input-only pins; that is
+correct for sensor outputs. Adjust all four sensor trimmers on the real track.
+This module detects reflected-IR light/dark contrast, not RGB paint colours.
+Firmware mapping: selected WHITE target = raw digital HIGH; selected BLACK
+ target = raw digital LOW (per the linked module's product description).
+If your particular module revision has inverted output behaviour, adjust
+readLineSensors() in StreetWatchESP32.ino after measuring its output.
+
+4) OPTIONAL HC-SR04 DISTANCE SENSOR
+----------------------------------
+HC-SR04 VCC  ---> regulated 5V supply
+HC-SR04 GND  ---> ESP32 GND
+HC-SR04 TRIG ---> ESP32 GPIO5
+HC-SR04 ECHO ---> VOLTAGE DIVIDER ---> ESP32 GPIO18
+IMPORTANT: HC-SR04 ECHO is normally 5V. Never connect it directly to ESP32.
+Use a resistor divider / level shifter so GPIO18 receives no more than 3.3V.
+If not installed, set USE_ULTRASONIC_INTERLOCK=false in the firmware.
+
+5) ATTACHMENT OUTPUTS (DRIVER INPUTS ONLY)
+------------------------------------------
+ESP32 GPIO16 ---> BRUSH relay/MOSFET input
+ESP32 GPIO17 ---> LED relay/MOSFET input
+ESP32 GPIO19 ---> SPRAY pump relay/MOSFET input
+ESP32 GPIO21 ---> RIG-UP relay/driver input
+ESP32 GPIO22 ---> RIG-DOWN relay/driver input
+Driver module GND ---> ESP32 GND (for non-isolated modules)
+
+These GPIOs are logic signals, NOT power outputs. Never connect a motor, pump,
+solenoid, high-current LED or other load directly to an ESP32 GPIO. Use a
+correctly rated relay/MOSFET, flyback diode for inductive DC loads, separate
+load power, fuse, suitable wire and an emergency power disconnect. Fit physical
+upper/lower limit switches and a hardwired interlock so UP and DOWN cannot run
+together even if software fails.
+
+6) OPTIONAL BATTERY MONITOR (DISABLED BY DEFAULT)
+-------------------------------------------------
+ESP32 GPIO39 / VN (ADC input) <--- battery voltage divider output
+Battery negative ----------------> ESP32 GND
+Use a properly calculated divider and ensure ADC input stays within ESP32's
+permitted range. Configure divider ratio and battery thresholds in firmware.
+USE_BATTERY_SENSOR is false by default; no battery percentage is reported.
+
+7) QUICK PIN SUMMARY
+--------------------
+GPIO 5  = HC-SR04 TRIG (optional)
+GPIO13  = L298N IN4
+GPIO14  = L298N IN3
+GPIO16  = Brush driver input
+GPIO17  = LED driver input
+GPIO18  = HC-SR04 ECHO via divider (optional)
+GPIO19  = Spray driver input
+GPIO21  = Rig Up driver input
+GPIO22  = Rig Down driver input
+GPIO25  = L298N ENA / Motor A PWM
+GPIO26  = L298N IN1
+GPIO27  = L298N IN2
+GPIO32  = IR sensor OUT1 / leftmost
+GPIO33  = L298N ENB / Motor B PWM
+GPIO34  = IR sensor OUT2
+GPIO35  = IR sensor OUT3
+GPIO36  = IR sensor OUT4 / rightmost
+GPIO39  = Optional battery ADC input (disabled)
+3V3     = IR sensor VCC
+GND     = Shared logic ground
+
+8) FIRST POWER-ON CHECKLIST
+---------------------------
+[ ] Lift the wheels off the ground.
+[ ] Keep the motor battery disconnected while checking signal wiring.
+[ ] Verify ESP32 and driver grounds are common.
+[ ] Confirm no 5V sensor output is connected directly to ESP32 GPIO.
+[ ] Verify ENA/ENB jumper removal before PWM use.
+[ ] Test each motor direction at low speed.
+[ ] Test each attachment output with the load disconnected first.
+[ ] Test lift limit switches and hardwired interlock.
+[ ] Keep a physical motor / battery disconnect within reach.
+[ ] Never test autonomous movement on a public road.

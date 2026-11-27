@@ -1,0 +1,102 @@
+STREETWATCH NEO - WEB BUTTON / ESP32 GPIO / HIGH-LOW MAP
+=======================================================
+Firmware: firmware/StreetWatchESP32/StreetWatchESP32.ino
+Board: ESP32 DevKit V1
+Logic convention for attachment outputs: HIGH = ON, LOW = OFF.
+Movement direction depends on the L298N IN pin pairs shown below.
+
+A) CONTROL BUTTONS AND WHAT THEY DO
+----------------------------------
+WEB CONTROL BUTTON       ACTION SENT TO ESP32             RESULT
+------------------       --------------------             ------
+MANUAL                   mode=manual                      Manual drive enabled
+AUTO LINE FOLLOW         mode=auto                         IR line-follow enabled
+WHITE LINE               line_color=white                 HIGH sensor output is target
+BLACK LINE               line_color=black                 LOW sensor output is target
+FORWARD (hold)            command=forward                  Both motors forward
+REVERSE (hold)            command=reverse                  Both motors reverse
+LEFT (hold)               command=left                     Motor A forward, B reverse
+RIGHT (hold)              command=right                    Motor A reverse, B forward
+STOP                      command=stop                     Both motors stop
+EMERGENCY STOP            emergency=true                  Stop motors; all attachments OFF
+SPEED SLIDER              speed=0..255                    L298N PWM speed setting
+BRUSH (toggle)            accessories.brush=true/false   GPIO16 HIGH/LOW
+LED (toggle)              accessories.led=true/false     GPIO17 HIGH/LOW
+SPRAY (toggle)            accessories.spray=true/false   GPIO19 HIGH/LOW
+RIG UP (press and hold)   accessories.rig_up=true/false  GPIO21 HIGH only while held
+RIG DOWN (press and hold) accessories.rig_down=true/false GPIO22 HIGH only while held
+DEVICE SELECTOR           device_id=<chosen device>      Only that registered ESP32 gets commands
+
+Brush, LED and Spray are latched toggles: click once to turn ON, click again
+for OFF. Rig Up and Rig Down are momentary: they turn ON while the pointer/button
+is held and turn OFF on release, pointer cancellation, browser focus loss, or
+emergency stop. Never rely on software alone for lift travel limits.
+
+B) L298N INPUT PIN STATES FOR EACH MOTOR DIRECTION
+--------------------------------------------------
+The firmware drives ENA/ENB with PWM (0..255). The IN pins set direction.
+For each motor: INx=HIGH, INy=LOW means forward; INx=LOW, INy=HIGH means reverse.
+Both LOW with PWM=0 is stop in this firmware.
+
+WEB ACTION  MOTOR A / FRONT (ENA=GPIO25)       MOTOR B / SECOND (ENB=GPIO33)
+----------  -----------------------------       ----------------------------
+FORWARD     GPIO26 HIGH, GPIO27 LOW             GPIO14 HIGH, GPIO13 LOW
+REVERSE     GPIO26 LOW, GPIO27 HIGH             GPIO14 LOW, GPIO13 HIGH
+LEFT PIVOT  GPIO26 HIGH, GPIO27 LOW             GPIO14 LOW, GPIO13 HIGH
+RIGHT PIVOT GPIO26 LOW, GPIO27 HIGH             GPIO14 HIGH, GPIO13 LOW
+STOP        GPIO26 LOW, GPIO27 LOW; PWM 0       GPIO14 LOW, GPIO13 LOW; PWM 0
+
+If your chassis has motors mounted/oriented differently, the physical vehicle's
+left/right and forward/reverse can differ. Lift the wheels and verify; swap the
+motor output wires or edit applyManualCommand() if required.
+
+C) COMPLETE OUTPUT GPIO MAP
+---------------------------
+Function                 ESP32 GPIO      HIGH means / LOW means
+--------                 ----------      ----------------------
+L298N ENA (PWM)           GPIO25          PWM duty / zero duty
+L298N IN1                 GPIO26          Motor A direction bit 1
+L298N IN2                 GPIO27          Motor A direction bit 2
+L298N ENB (PWM)           GPIO33          PWM duty / zero duty
+L298N IN3                 GPIO14          Motor B direction bit 1
+L298N IN4                 GPIO13          Motor B direction bit 2
+BRUSH driver input        GPIO16          HIGH=Brush ON / LOW=OFF
+LED driver input          GPIO17          HIGH=LED ON / LOW=OFF
+SPRAY driver input       GPIO19          HIGH=Spray ON / LOW=OFF
+RIG UP driver input       GPIO21          HIGH=Up while held / LOW=OFF
+RIG DOWN driver input     GPIO22          HIGH=Down while held / LOW=OFF
+
+D) IR SENSOR INPUT MAP (LEFT TO RIGHT)
+--------------------------------------
+Sensor output             ESP32 GPIO      Selected white line  Selected black line
+--------------            ----------      --------------------  -------------------
+OUT1 (leftmost)           GPIO32          active when raw HIGH  active when raw LOW
+OUT2                      GPIO34          active when raw HIGH  active when raw LOW
+OUT3                      GPIO35          active when raw HIGH  active when raw LOW
+OUT4 (rightmost)          GPIO36          active when raw HIGH  active when raw LOW
+
+The four sensors are inputs: the ESP32 does not drive them HIGH/LOW. Their
+signal level is read by digitalRead(). Confirm the exact board output polarity
+with a multimeter / serial test on your specific sensor board.
+
+E) OPTIONAL INPUTS
+------------------
+HC-SR04 TRIG: GPIO5 output pulse.
+HC-SR04 ECHO: GPIO18 input, MUST pass through a voltage divider/level shifter.
+Battery monitor: GPIO39 ADC input, disabled in the supplied firmware.
+
+F) NETWORK / MULTI-DEVICE NOTES
+-------------------------------
+Each ESP32 gets its own device_id and unique token from the website Devices tab.
+All ESP32 units poll the same website API, using the server URL configured for
+that unit. The site and rover can be on different networks if the website is
+hosted on a public/reachable server with HTTPS and a valid TLS certificate.
+Do not use localhost or a private 192.168.x.x URL for a remote-network rover.
+The URL is configured in firmware/StreetWatchESP32/config.h on this one line:
+#define STREETWATCH_SERVER "https://your-public-domain.example"
+Change that line only when the server's public address changes. The per-device
+ID and token are separate lines and must match that device's Devices-tab entry.
+
+IMPORTANT: GPIO pins are logic-level signals, not power supplies. Use rated
+motor drivers, relay/MOSFET modules, fuses, common ground, flyback protection,
+physical limit switches and a hardwired emergency disconnect.

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Vehicle Control{% endblock %}
+{% block page_title %}Vehicle Control Center{% endblock %}
+{% block extra_head %}
+<style>
+/* The control station is deliberately landscape-first and fits one desktop viewport. */
+.main-content:has(.control-layout){height:100vh;min-height:0;overflow:hidden}
+.main-content:has(.control-layout) .page-body{height:calc(100vh - 60px);min-height:0;overflow:hidden;padding:12px 16px}
+.main-content:has(.control-layout) .page-footer{display:none}
+.control-page{height:100%;min-height:0;display:flex;flex-direction:column;gap:9px}
+.control-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:24px;color:var(--text-muted);font-size:11px}
+.control-layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(280px,1.05fr) minmax(245px,.9fr) minmax(285px,1fr);gap:12px}
+.control-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:13px;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.control-card h3{font-size:13px;margin:0 0 10px;color:var(--text-primary);flex-shrink:0}
+.mode-switch{display:flex;gap:7px;background:var(--bg-primary);padding:4px;border-radius:9px;margin-bottom:9px;flex-shrink:0}
+.mode-btn{flex:1;border:0;border-radius:7px;padding:9px 7px;background:transparent;color:var(--text-muted);font-size:11px;font-weight:800;cursor:pointer}
+.mode-btn.active{background:var(--accent-cyan);color:#07131d}
+.drive-help{text-align:center;color:var(--text-muted);font-size:9px;letter-spacing:.3px}
+.drive-pad{display:grid;grid-template-columns:repeat(3,minmax(48px,64px));grid-template-rows:repeat(3,minmax(43px,56px));gap:7px;justify-content:center;margin:9px auto 6px}
+.drive-btn{border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);color:var(--text-primary);font-size:19px;cursor:pointer;touch-action:none;user-select:none}
+.drive-btn:active,.drive-btn.pressed{background:var(--accent-cyan);color:#07131d;transform:scale(.97)}
+.drive-btn.stop{font-size:10px;font-weight:800;color:var(--accent-red);border-color:var(--accent-red)}
+.speed-row{display:flex;align-items:center;gap:9px;margin-top:auto;color:var(--text-muted);font-size:11px}
+.speed-row input{flex:1;min-width:40px;accent-color:var(--accent-cyan)}
+.status-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:20px;font-size:10px;font-weight:700;background:var(--bg-secondary);color:var(--text-muted);white-space:nowrap}
+.status-pill.online{color:var(--accent-green)}.status-pill.offline{color:var(--accent-red)}
+.telemetry-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.telemetry{padding:10px;background:var(--bg-secondary);border-radius:8px;min-width:0}.telemetry small{display:block;color:var(--text-muted);font-size:9px;margin-bottom:4px}.telemetry strong{font-size:16px;color:var(--text-primary);overflow-wrap:anywhere}
+.telemetry-meta{margin-top:auto;padding-top:10px;font-size:10px;color:var(--text-muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.emergency{width:100%;margin-top:10px;padding:11px;border:0;border-radius:9px;background:var(--accent-red);color:white;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0}
+.auto-note{padding:9px;border-radius:8px;background:var(--bg-secondary);font-size:10px;color:var(--text-muted);line-height:1.45}
+.line-colour{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:10px;color:var(--text-muted)}
+.line-colour select{flex:1;min-width:0;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:7px}
+.accessory-hint{font-size:10px;color:var(--text-muted);margin:-3px 0 9px;line-height:1.4}
+.accessory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.accessory-btn{min-height:68px;border:1px solid var(--border);border-radius:9px;background:var(--bg-secondary);color:var(--text-primary);font-size:10px;font-weight:800;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;touch-action:none;user-select:none}
+.accessory-btn i{font-size:18px;color:var(--accent-cyan)}
+.accessory-btn.active,.accessory-btn.pressed{border-color:var(--accent-green);background:rgba(22,163,74,.14);color:var(--accent-green)}
+.accessory-btn.active i,.accessory-btn.pressed i{color:var(--accent-green)}
+.accessory-btn small{font-size:9px;color:var(--text-muted)}
+.accessory-warning{font-size:9px;color:var(--text-muted);line-height:1.4;margin-top:auto;padding-top:8px}
+[hidden]{display:none!important}
+@media(max-width:900px){body:has(.control-layout) .sidebar{width:56px}body:has(.control-layout) .sidebar-logo .logo-text,body:has(.control-layout) .sidebar-logo .logo-sub,body:has(.control-layout) .nav-item span:not(.nav-icon),body:has(.control-layout) .nav-section-label,body:has(.control-layout) .sidebar-footer{display:none}body:has(.control-layout) .nav-item{padding:12px;justify-content:center}body:has(.control-layout) .main-content{margin-left:56px}}
+@media(max-width:1100px){.control-layout{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.control-card{padding:10px}.accessory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.accessory-btn{min-height:58px}.telemetry{padding:7px}.telemetry strong{font-size:14px}}
+@media(max-width:760px){.main-content:has(.control-layout){height:auto;min-height:100vh;overflow:visible}.main-content:has(.control-layout) .page-body{height:auto;min-height:calc(100vh - 60px);overflow:visible}.control-page{height:auto}.control-layout{grid-template-columns:1fr}.attachments-card{grid-column:auto}.control-card{overflow:visible}.accessory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.telemetry-meta{margin-top:10px}}
+@media(max-height:650px) and (min-width:761px){.control-page{gap:6px}.control-card{padding:9px}.control-card h3{margin-bottom:6px}.drive-pad{grid-template-rows:repeat(3,42px);gap:5px;margin:6px auto}.telemetry{padding:7px}.telemetry strong{font-size:14px}.accessory-btn{min-height:55px}.emergency{padding:8px;margin-top:7px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="control-page">
+  <div class="control-topline"><span>ESP32 DevKit V1 · L298N dual-motor drive · 4-channel IR line tracker</span><label style="display:flex;align-items:center;gap:7px">Selected device <select id="deviceSelect" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:6px;max-width:190px"><option value="">No devices added</option></select></label><span id="connection" class="status-pill offline"><i class="fas fa-circle" style="font-size:7px"></i> Device offline</span></div>
+  <div class="control-layout">
+    <section class="control-card">
+      <h3><i class="fas fa-gamepad" style="color:var(--accent-cyan);margin-right:7px"></i>Drive controls</h3>
+      <div class="mode-switch"><button class="mode-btn active" id="manualMode" type="button"><i class="fas fa-hand-paper"></i> MANUAL</button><button class="mode-btn" id="autoMode" type="button"><i class="fas fa-robot"></i> AUTO LINE FOLLOW</button></div>
+      <div id="manualPanel" style="display:flex;flex-direction:column;flex:1;min-height:0">
+        <div class="drive-help">PRESS AND HOLD TO MOVE · RELEASE TO STOP</div>
+        <div class="drive-pad">
+          <span></span><button class="drive-btn" data-command="forward" aria-label="Forward"><i class="fas fa-chevron-up"></i></button><span></span>
+          <button class="drive-btn" data-command="left" aria-label="Left"><i class="fas fa-chevron-left"></i></button><button class="drive-btn stop" data-command="stop">STOP</button><button class="drive-btn" data-command="right" aria-label="Right"><i class="fas fa-chevron-right"></i></button>
+          <span></span><button class="drive-btn" data-command="reverse" aria-label="Reverse"><i class="fas fa-chevron-down"></i></button><span></span>
+        </div>
+        <div class="speed-row"><span>Motor speed</span><input id="speed" type="range" min="0" max="255" value="150"><strong id="speedValue">150</strong></div>
+      </div>
+      <div id="autoPanel" hidden>
+        <div class="auto-note"><strong style="color:var(--text-primary)">4-sensor line-following mode</strong><br>The ESP32 reads the four IR sensors and steers the L298N motors to follow the selected reflective line. If the line is lost, the car stops.</div>
+        <label class="line-colour" for="lineColour">Follow line colour<select id="lineColour"><option value="white" selected>White line (default)</option><option value="black">Black line</option></select></label>
+        <div class="auto-note" style="margin-top:8px">Use a contrasting matte track and calibrate each sensor potentiometer. This reflective IR array distinguishes light/dark contrast, not arbitrary paint colours.</div>
+      </div>
+      <button class="emergency" id="emergency"><i class="fas fa-hand-paper"></i> &nbsp; EMERGENCY STOP</button>
+    </section>
+    <section class="control-card">
+      <h3><i class="fas fa-satellite-dish" style="color:var(--accent-green);margin-right:7px"></i>Live telemetry</h3>
+      <div class="telemetry-grid">
+        <div class="telemetry"><small>ACTIVE MODE</small><strong id="teleMode">MANUAL</strong></div><div class="telemetry"><small>MOVEMENT</small><strong id="teleCommand">STOP</strong></div>
+        <div class="telemetry"><small>BATTERY</small><strong id="teleBattery">—</strong></div><div class="telemetry"><small>LINE SENSORS L→R</small><strong id="teleLine">— — — —</strong></div>
+        <div class="telemetry"><small>FOLLOW COLOUR</small><strong id="teleColour">WHITE</strong></div><div class="telemetry"><small>WI-FI SIGNAL</small><strong id="teleRssi">—</strong></div>
+        <div class="telemetry"><small>OBSTACLE DISTANCE</small><strong id="teleDistance">—</strong></div><div class="telemetry"><small>FIRMWARE</small><strong id="teleFirmware" style="font-size:13px">—</strong></div>
+      </div>
+      <div class="telemetry-meta"><span>Device: <b id="deviceId">streetwatch-rover-01</b></span><span>Updated: <b id="lastSeen">Never</b></span></div>
+      <div class="auto-note" style="margin-top:10px"><i class="fas fa-shield-alt" style="color:var(--accent-green)"></i> Link-loss safety stop enabled. Keep a physical motor disconnect within reach.</div>
+    </section>
+    <section class="control-card attachments-card">
+      <h3><i class="fas fa-tools" style="color:var(--accent-orange);margin-right:7px"></i>Vehicle attachments</h3>
+      <p class="accessory-hint">Brush, LED and Spray stay ON until clicked again. Hold Rig Up / Rig Down for exactly as long as you need; release to stop.</p>
+      <div class="accessory-grid">
+        <button type="button" class="accessory-btn" data-accessory-toggle="brush" aria-pressed="false"><i class="fas fa-broom"></i><span>BRUSH</span><small data-state-label="brush">OFF</small></button>
+        <button type="button" class="accessory-btn" data-accessory-momentary="rig_up" aria-pressed="false"><i class="fas fa-arrow-up"></i><span>RIG UP</span><small>HOLD</small></button>
+        <button type="button" class="accessory-btn" data-accessory-momentary="rig_down" aria-pressed="false"><i class="fas fa-arrow-down"></i><span>RIG DOWN</span><small>HOLD</small></button>
+        <button type="button" class="accessory-btn" data-accessory-toggle="led" aria-pressed="false"><i class="fas fa-lightbulb"></i><span>LED</span><small data-state-label="led">OFF</small></button>
+        <button type="button" class="accessory-btn" data-accessory-toggle="spray" aria-pressed="false"><i class="fas fa-spray-can"></i><span>SPRAY</span><small data-state-label="spray">OFF</small></button>
+      </div>
+      <div class="accessory-warning">Connect loads through correctly rated relay/MOSFET drivers. Add physical lift limit switches and a mechanical interlock.</div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let mode='manual', speed=150, activeCommand='stop', selectedDevice='';
+  const accessoryState={brush:false,rig_up:false,rig_down:false,led:false,spray:false};
+  async function send(payload){if(!selectedDevice){if(window.showToast)showToast('Add and select an ESP32 in the Devices tab.','error');return false;}try{const r=await fetch('/api/robot/command',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.querySelector('meta[name=csrf-token]')?.content||''},body:JSON.stringify({...payload,device_id:selectedDevice})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Command failed');return true;}catch(e){if(payload.command&&payload.command!=='stop')activeCommand='stop';if(payload.accessories){Object.keys(accessoryState).forEach(k=>accessoryState[k]=false);paintAccessories(accessoryState);}if(window.showToast)showToast(e.message,'error');return false;}}
+  function paintMode(){ $('manualMode').classList.toggle('active',mode==='manual');$('autoMode').classList.toggle('active',mode==='auto');$('manualPanel').hidden=mode!=='manual';$('autoPanel').hidden=mode!=='auto';$('teleMode').textContent=mode.toUpperCase(); }
+  $('manualMode').addEventListener('click',async()=>{mode='manual';activeCommand='stop';await send({mode,command:'stop'});paintMode();});
+  $('autoMode').addEventListener('click',async()=>{mode='auto';activeCommand='stop';await send({mode,line_color:$('lineColour').value});paintMode();});
+  $('lineColour').addEventListener('change',e=>{send({line_color:e.target.value});$('teleColour').textContent=e.target.value.toUpperCase();});
+  async function drive(command){if(mode!=='manual')return;activeCommand=command;await send({command});}
+  document.querySelectorAll('[data-command]').forEach(btn=>{const cmd=btn.dataset.command;btn.addEventListener('pointerdown',e=>{e.preventDefault();btn.classList.add('pressed');btn.setPointerCapture?.(e.pointerId);drive(cmd);});const release=()=>{btn.classList.remove('pressed');if(cmd!=='stop'&&activeCommand===cmd)drive('stop');};btn.addEventListener('pointerup',release);btn.addEventListener('pointercancel',release);btn.addEventListener('lostpointercapture',release);btn.addEventListener('click',()=>{if(cmd==='stop')drive('stop');});});
+  $('emergency').addEventListener('click',()=>{activeCommand='stop';Object.keys(accessoryState).forEach(k=>accessoryState[k]=false);paintAccessories(accessoryState);send({command:'stop',emergency:true,accessories:{brush:false,rig_up:false,rig_down:false,led:false,spray:false}});document.querySelectorAll('[data-accessory-momentary]').forEach(b=>b.dispatchEvent(new Event('blur')));});
+  $('speed').addEventListener('input',e=>{speed=Number(e.target.value);$('speedValue').textContent=speed;send({speed});});
+  function paintAccessories(states){Object.assign(accessoryState,states||{});document.querySelectorAll('[data-accessory-toggle]').forEach(btn=>{const key=btn.dataset.accessoryToggle,on=!!accessoryState[key];btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));const label=btn.querySelector(`[data-state-label="${key}"]`);if(label)label.textContent=on?'ON':'OFF';});document.querySelectorAll('[data-accessory-momentary]').forEach(btn=>{const key=btn.dataset.accessoryMomentary,on=!!accessoryState[key];btn.classList.toggle('pressed',on);btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});}
+  document.querySelectorAll('[data-accessory-toggle]').forEach(btn=>btn.addEventListener('click',async()=>{const key=btn.dataset.accessoryToggle,next=!accessoryState[key];if(await send({accessories:{[key]:next}}))paintAccessories({[key]:next});}));
+  document.querySelectorAll('[data-accessory-momentary]').forEach(btn=>{const key=btn.dataset.accessoryMomentary;let held=false;const release=()=>{if(!held)return;held=false;paintAccessories({[key]:false});send({accessories:{[key]:false}});};btn.addEventListener('pointerdown',async e=>{e.preventDefault();if(held)return;if((key==='rig_up'&&accessoryState.rig_down)||(key==='rig_down'&&accessoryState.rig_up))return;held=true;btn.setPointerCapture?.(e.pointerId);if(await send({accessories:{rig_up:key==='rig_up',rig_down:key==='rig_down'}}))paintAccessories({rig_up:key==='rig_up',rig_down:key==='rig_down'});else{held=false;}});btn.addEventListener('pointerup',release);btn.addEventListener('pointercancel',release);btn.addEventListener('lostpointercapture',release);btn.addEventListener('blur',release);});
+  async function refresh(){try{const r=await fetch('/api/robot/status?device_id='+encodeURIComponent(selectedDevice),{cache:'no-store'});if(!r.ok)return;const d=await r.json();mode=d.mode||'manual';if(!d.connected)activeCommand='stop';speed=Number(d.speed??150);$('speed').value=speed;$('speedValue').textContent=speed;paintMode();const pill=$('connection');pill.className='status-pill '+(d.connected?'online':'offline');pill.innerHTML='<i class="fas fa-circle" style="font-size:7px"></i> '+(d.connected?'Device connected':'Device offline');$('teleMode').textContent=d.mode.toUpperCase();$('teleCommand').textContent=(d.connected?d.command:'stop').toUpperCase();$('teleBattery').textContent=d.battery==null?'—':d.battery+'%';$('teleDistance').textContent=d.distance_cm==null?'—':d.distance_cm+' cm';$('teleRssi').textContent=d.rssi==null?'—':d.rssi+' dBm';$('teleFirmware').textContent=d.firmware||'—';$('deviceId').textContent=d.device_id||'—';$('lastSeen').textContent=d.last_seen_seconds==null?'Never':d.last_seen_seconds+'s';$('teleLine').textContent=Array.isArray(d.line_sensors)?d.line_sensors.map(v=>v?'●':'○').join(' '):'— — — —';$('teleColour').textContent=(d.line_color||'white').toUpperCase();if(d.line_color)$('lineColour').value=d.line_color;paintAccessories(d.accessories||{});}catch(e){}}
+  async function loadDevices(){try{const r=await fetch('/api/robot/devices');const devices=await r.json();const sel=$('deviceSelect');const old=selectedDevice;sel.innerHTML='';devices.forEach(d=>{const o=document.createElement('option');o.value=d.device_id;o.textContent=d.name+(d.connected?' · online':' · offline');sel.appendChild(o);});selectedDevice=devices.some(d=>d.device_id===old)?old:(devices[0]?.device_id||'');sel.value=selectedDevice;if(!selectedDevice){$('connection').textContent='No device registered';} }catch(e){}}
+  $('deviceSelect').addEventListener('change',()=>{selectedDevice=$('deviceSelect').value;activeCommand='stop';mode='manual';paintMode();paintAccessories({brush:false,rig_up:false,rig_down:false,led:false,spray:false});refresh();});
+  paintMode();loadDevices().then(refresh);setInterval(()=>{loadDevices().then(refresh);},5000);
+  // Renew the short server-side command lease while this authenticated control page is active.
+  // If the tab closes, loses focus, or the network fails, the lease expires and ESP32 stops.
+  setInterval(()=>{if(!selectedDevice)return;const activeAccessory=Object.fromEntries(Object.entries(accessoryState));send({mode,command:mode==='manual'?activeCommand:'stop',accessories:activeAccessory,renewal:true});},4000);
+  const releaseAll=()=>{activeCommand='stop';Object.keys(accessoryState).forEach(k=>accessoryState[k]=false);paintAccessories(accessoryState);send({command:'stop',accessories:{brush:false,rig_up:false,rig_down:false,led:false,spray:false}});document.querySelectorAll('[data-accessory-momentary]').forEach(b=>b.dispatchEvent(new Event('blur')));};
+  window.addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll();});
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Live Monitoring{% endblock %}
+{% block page_title %}Live Camera Monitoring{% endblock %}
+{% block extra_head %}
+<style>
+.live-status{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-muted)}
+.camera-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:22px}
+.camera-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.camera-toolbar label{color:var(--text-secondary);font-size:12px;font-weight:600}
+.camera-select{min-width:220px;max-width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text-primary)}
+.browser-preview{position:relative;aspect-ratio:16/9;max-height:68vh;background:#030712;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.browser-preview video{width:100%;height:100%;object-fit:contain;display:none;background:#030712}
+.preview-placeholder{text-align:center;color:var(--text-muted);padding:24px;font-size:13px;line-height:1.8}
+.preview-placeholder i{font-size:42px;color:var(--accent-blue);display:block;margin-bottom:12px}
+.preview-tag{position:absolute;top:12px;left:12px;background:#07131ddd;color:#fff;padding:6px 10px;border-radius:6px;font-size:10px;font-weight:700;z-index:2}
+.preview-live{position:absolute;top:12px;right:12px;background:#c62828;color:#fff;padding:6px 10px;border-radius:6px;font-size:10px;font-weight:800;display:none;z-index:2}
+.camera-note{font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.6}
+.camera-state{font-size:12px;color:var(--text-secondary);margin-left:auto}
+@media(max-width:760px){.camera-select{flex:1;min-width:160px}.camera-state{width:100%;margin-left:0}.camera-panel{padding:12px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="live-status">
+  <span class="badge badge-live"><i class="fas fa-circle" style="font-size:7px;"></i> LIVE MONITORING</span>
+  <strong id="camera-count" style="color:var(--text-primary);">Checking browser cameras…</strong>
+  <span>Camera access is provided by this browser on your device.</span>
+  <span id="live-clock" style="margin-left:auto;"></span>
+</div>
+
+<section class="camera-panel" aria-label="Live camera preview">
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-video" style="color:var(--accent-cyan);margin-right:8px;"></i>Live Camera Preview</div>
+    <span id="camera-state" class="camera-state" role="status">Not started</span>
+  </div>
+  <div class="camera-toolbar">
+    <label for="camera-select">Camera</label>
+    <select id="camera-select" class="camera-select" aria-label="Choose camera">
+      <option value="">Detecting cameras…</option>
+    </select>
+    <button id="refresh-cameras" class="btn btn-outline" type="button"><i class="fas fa-sync-alt"></i> Refresh</button>
+    <button id="start-camera" class="btn btn-success" type="button"><i class="fas fa-play"></i> Start preview</button>
+    <button id="stop-camera" class="btn btn-danger" type="button" disabled><i class="fas fa-stop"></i> Stop</button>
+    <button id="fullscreen-camera" class="btn btn-outline" type="button"><i class="fas fa-expand"></i> Full screen</button>
+  </div>
+  <div id="browser-preview" class="browser-preview">
+    <video id="browser-camera" autoplay playsinline muted></video>
+    <div id="preview-placeholder" class="preview-placeholder">
+      <i class="fas fa-camera"></i>
+      <strong style="color:var(--text-primary);">Your camera preview will appear here</strong><br>
+      Select Iriun Webcam and press Start preview.
+    </div>
+    <span class="preview-tag">STREETWATCH • LOCAL CAMERA</span>
+    <span id="preview-live" class="preview-live">● LIVE</span>
+  </div>
+  <p class="camera-note">
+    Use this page in Chrome on the same Windows PC where Iriun Webcam is running. Allow camera permission when prompted.
+    The browser camera preview stays on your device; it is not automatically uploaded to Render. HTTPS is required.
+  </p>
+</section>
+
+<div class="card mb-24">
+  <div class="card-header"><div class="card-title"><i class="fas fa-bolt" style="color:var(--accent-orange);margin-right:8px;"></i>Detection Simulation</div>
+    <button id="simulate-btn" onclick="simulateDetection()" class="btn btn-primary"><i class="fas fa-bolt"></i> Simulate Detection</button></div>
+  <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Generate a mock vehicle detection event using the AI engine.</p>
+  <div class="table-wrapper"><table><thead><tr><th>Plate Number</th><th>Speed</th><th>Location</th><th>Camera</th><th>Violation</th><th>Time</th></tr></thead>
+  <tbody id="live-feed-body"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px;">Press "Simulate Detection" to start the live feed</td></tr></tbody></table></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+  const video = document.getElementById('browser-camera');
+  const select = document.getElementById('camera-select');
+  const count = document.getElementById('camera-count');
+  const state = document.getElementById('camera-state');
+  const placeholder = document.getElementById('preview-placeholder');
+  const liveTag = document.getElementById('preview-live');
+  const startButton = document.getElementById('start-camera');
+  const stopButton = document.getElementById('stop-camera');
+  let activeStream = null;
+
+  function setStatus(message) { state.textContent = message; }
+  function stopCamera() {
+    if (activeStream) activeStream.getTracks().forEach(track => track.stop());
+    activeStream = null;
+    video.pause();
+    video.srcObject = null;
+    video.style.display = 'none';
+    placeholder.style.display = 'block';
+    liveTag.style.display = 'none';
+    startButton.disabled = false;
+    stopButton.disabled = true;
+    setStatus('Stopped');
+  }
+  async function refreshCameras() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      count.textContent = 'Camera API unavailable';
+      select.innerHTML = '<option value="">Use HTTPS in a supported browser</option>';
+      setStatus('Browser camera access unavailable');
+      return;
+    }
+    try {
+      // Request permission first so browsers reveal camera names such as Iriun Webcam.
+      if (!activeStream) {
+        try {
+          const permissionStream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+          permissionStream.getTracks().forEach(track => track.stop());
+        } catch (permissionError) {
+          if (permissionError.name === 'NotAllowedError' || permissionError.name === 'PermissionDeniedError') {
+            count.textContent = 'Camera permission required';
+            select.innerHTML = '<option value="">Allow camera access, then refresh</option>';
+            setStatus('Permission not granted');
+            return;
+          }
+        }
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      const previous = select.value;
+      select.innerHTML = '';
+      if (!cameras.length) {
+        select.add(new Option('No camera detected', ''));
+        count.textContent = '0 browser camera(s) found';
+        setStatus('No camera detected — check Iriun');
+        return;
+      }
+      cameras.forEach((camera, index) => {
+        const label = camera.label || `Camera ${index + 1}`;
+        select.add(new Option(label, camera.deviceId));
+      });
+      if (cameras.some(camera => camera.deviceId === previous)) select.value = previous;
+      count.textContent = `${cameras.length} browser camera(s) available`;
+      setStatus(activeStream ? 'Connected' : 'Ready');
+    } catch (error) {
+      count.textContent = 'Could not list cameras';
+      setStatus(error.message || 'Camera error');
+    }
+  }
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('Camera requires HTTPS and a supported browser');
+      return;
+    }
+    try {
+      stopCamera();
+      const deviceId = select.value;
+      const constraints = {audio:false, video: deviceId ? {deviceId:{exact:deviceId}} : true};
+      activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = activeStream;
+      video.style.display = 'block';
+      placeholder.style.display = 'none';
+      liveTag.style.display = 'block';
+      await video.play();
+      startButton.disabled = true;
+      stopButton.disabled = false;
+      const track = activeStream.getVideoTracks()[0];
+      setStatus(`Connected${track && track.label ? ' • ' + track.label : ''}`);
+      await refreshCameras();
+      activeStream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
+        stopCamera(); setStatus('Camera disconnected');
+      }));
+    } catch (error) {
+      stopCamera();
+      const messages = {
+        NotAllowedError: 'Camera permission denied — allow it in Chrome site settings',
+        NotFoundError: 'Selected camera not found — check Iriun Webcam',
+        NotReadableError: 'Camera is busy in another application'
+      };
+      setStatus(messages[error.name] || `Could not start camera: ${error.message}`);
+    }
+  }
+  document.getElementById('refresh-cameras').addEventListener('click', refreshCameras);
+  startButton.addEventListener('click', startCamera);
+  stopButton.addEventListener('click', stopCamera);
+  select.addEventListener('change', () => { if (activeStream) startCamera(); });
+  document.getElementById('fullscreen-camera').addEventListener('click', async () => {
+    const target = document.getElementById('browser-preview');
+    try {
+      if (!document.fullscreenElement) await target.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch (error) { setStatus('Full-screen mode is unavailable'); }
+  });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', refreshCameras);
+  }
+  function updateClock() {
+    const el = document.getElementById('live-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  }
+  updateClock(); setInterval(updateClock,1000);
+  refreshCameras();
+  window.addEventListener('beforeunload', stopCamera);
+})();
+</script>
+{% endblock %}
